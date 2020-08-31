@@ -7,14 +7,12 @@ module Parser exposing
     , atLeast
     , atMost
     , between
-    , blank
     , char
     , charNoCase
     , digit
+    , drop
     , end
     , fail
-    , grab
-    , ignore
     , into
     , letter
     , lowercase
@@ -31,10 +29,13 @@ module Parser exposing
     , parse
     , repeat
     , sequence
+    , space
+    , spaces
+    , stringOf
     , succeed
+    , take
     , text
     , textNoCase
-    , toString
     , until
     , uppercase
     , while
@@ -109,8 +110,8 @@ into context dataType =
 -- GRAB
 
 
-grab : Parser a -> Parser (a -> b) -> Parser b
-grab next parser =
+take : Parser a -> Parser (a -> b) -> Parser b
+take next parser =
     andThen2 (\f x -> succeed (f x))
         parser
         next
@@ -120,8 +121,8 @@ grab next parser =
 -- IGNORE
 
 
-ignore : Parser a -> Parser b -> Parser b
-ignore next parser =
+drop : Parser a -> Parser b -> Parser b
+drop next parser =
     andThen2 (\x _ -> succeed x)
         parser
         next
@@ -316,12 +317,12 @@ alphanumeric =
 
 
 
--- BLANK
+-- space
 -- regex: [ \t\n\r\f\v]
 
 
-blank : Parser Char
-blank =
+space : Parser Char
+space =
     oneOf
         [ char ' '
         , char '\t'
@@ -330,6 +331,16 @@ blank =
         , char '\u{000C}' -- \f
         , char '\u{000B}' -- \v
         ]
+
+
+
+-- spaces
+-- regex: [ \t\n\r\f\v]*
+
+
+spaces : Parser String
+spaces =
+    stringOf (zeroOrMore space)
 
 
 
@@ -353,7 +364,7 @@ end state =
 
 text : String -> Parser String
 text str =
-    toString (sequence (List.map char (String.toList str)))
+    stringOf (sequence (List.map char (String.toList str)))
 
 
 
@@ -362,7 +373,7 @@ text str =
 
 textNoCase : String -> Parser String
 textNoCase str =
-    toString (sequence (List.map charNoCase (String.toList str)))
+    stringOf (sequence (List.map charNoCase (String.toList str)))
 
 
 
@@ -389,8 +400,8 @@ sequence parsers initialState =
 -- TO STRING
 
 
-toString : Parser (List Char) -> Parser String
-toString =
+stringOf : Parser (List Char) -> Parser String
+stringOf =
     map String.fromList
 
 

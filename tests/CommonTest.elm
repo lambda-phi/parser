@@ -50,6 +50,13 @@ suite =
                         |> Expect.equal (Ok -12.34)
 
             --
+            , test "number match integer" <|
+                \_ ->
+                    number
+                        |> parse "1234abc"
+                        |> Expect.equal (Ok 1234)
+
+            --
             , test "number not match" <|
                 \_ ->
                     number

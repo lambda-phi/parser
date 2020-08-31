@@ -1,7 +1,7 @@
 module BasicUsageTest exposing (suite)
 
 import Expect
-import Parser exposing (anyChar, grab, ignore, into, parse)
+import Parser exposing (anyChar, drop, into, parse, take)
 import Test exposing (Test, describe, test)
 
 
@@ -15,36 +15,36 @@ type alias T =
 suite : Test
 suite =
     describe "Parser -- basic usage"
-        [ describe "into, grab and ignore"
-            [ test "grab one" <|
+        [ describe "into, take and drop"
+            [ test "take one" <|
                 \_ ->
                     into "T" (\x -> x)
-                        |> grab anyChar
+                        |> take anyChar
                         |> parse "abc"
                         |> Expect.equal (Ok 'a')
 
             --
-            , test "grab many" <|
+            , test "take many" <|
                 \_ ->
                     into "T" T
-                        |> grab anyChar
-                        |> grab anyChar
-                        |> grab anyChar
+                        |> take anyChar
+                        |> take anyChar
+                        |> take anyChar
                         |> parse "abc"
                         |> Expect.equal (Ok { a = 'a', b = 'b', c = 'c' })
 
             --
-            , test "grab and ignore" <|
+            , test "take and drop" <|
                 \_ ->
                     into "T" T
-                        |> ignore anyChar
-                        |> grab anyChar
-                        |> ignore anyChar
-                        |> grab anyChar
-                        |> ignore anyChar
-                        |> ignore anyChar
-                        |> grab anyChar
-                        |> ignore anyChar
+                        |> drop anyChar
+                        |> take anyChar
+                        |> drop anyChar
+                        |> take anyChar
+                        |> drop anyChar
+                        |> drop anyChar
+                        |> take anyChar
+                        |> drop anyChar
                         |> parse "abcdefgh"
                         |> Expect.equal (Ok { a = 'b', b = 'd', c = 'g' })
             ]

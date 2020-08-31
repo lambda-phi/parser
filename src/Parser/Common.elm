@@ -3,7 +3,7 @@ module Parser.Common exposing
     , number
     )
 
-import Parser exposing (Parser, andThen, digit, fail, map2, mapList, oneOf, oneOrMore, succeed, text, toString, zeroOrMore)
+import Parser exposing (Parser, andThen, digit, fail, map2, mapList, oneOf, oneOrMore, stringOf, succeed, text, zeroOrMore)
 
 
 
@@ -14,7 +14,7 @@ int : Parser Int
 int =
     map2 (++)
         (oneOf [ text "-", text "" ])
-        (toString (oneOrMore digit))
+        (stringOf (oneOrMore digit))
         |> andThen
             (\str ->
                 case String.toInt str of
@@ -38,9 +38,9 @@ number : Parser Float
 number =
     mapList (String.join "")
         [ oneOf [ text "-", text "" ]
-        , toString (oneOrMore digit)
-        , text "."
-        , toString (zeroOrMore digit)
+        , stringOf (oneOrMore digit)
+        , oneOf [ text ".", text "" ]
+        , stringOf (zeroOrMore digit)
         ]
         |> andThen
             (\str ->

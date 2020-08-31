@@ -1,7 +1,7 @@
 module ErrorReportingTest exposing (suite)
 
 import Expect
-import Parser exposing (anyChar, grab, ignore, into, parse)
+import Parser exposing (anyChar, drop, into, parse, take)
 import Test exposing (Test, describe, test)
 
 
@@ -12,7 +12,7 @@ suite =
             [ test "advance columns" <|
                 \_ ->
                     into "T" (\x -> x)
-                        |> grab anyChar
+                        |> take anyChar
                         |> parse "a"
                         |> Expect.equal (Ok 'a')
             ]

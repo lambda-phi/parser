@@ -1,7 +1,7 @@
 module CombinationsTest exposing (suite)
 
 import Expect
-import Parser exposing (atLeast, atMost, between, char, maybe, oneOf, oneOrMore, parse, repeat, sequence, succeed, text, textNoCase, toString, until, while, zeroOrMore)
+import Parser exposing (atLeast, atMost, between, char, maybe, oneOf, oneOrMore, parse, repeat, sequence, stringOf, succeed, text, textNoCase, until, while, zeroOrMore)
 import Result
 import Test exposing (Test, describe, test)
 
@@ -67,25 +67,25 @@ suite =
                         |> Expect.equal Nothing
             ]
 
-        -- toString
-        , describe "toString"
-            [ test "toString empty" <|
+        -- stringOf
+        , describe "stringOf"
+            [ test "stringOf empty" <|
                 \_ ->
-                    toString (succeed [])
+                    stringOf (succeed [])
                         |> parse ""
                         |> Expect.equal (Ok "")
 
             --
-            , test "toString match" <|
+            , test "stringOf match" <|
                 \_ ->
-                    toString (sequence [ char 'a', char 'b', char 'c' ])
+                    stringOf (sequence [ char 'a', char 'b', char 'c' ])
                         |> parse "abc"
                         |> Expect.equal (Ok "abc")
 
             --
-            , test "toString not match" <|
+            , test "stringOf not match" <|
                 \_ ->
-                    toString (sequence [ char 'a', char 'b', char 'c' ])
+                    stringOf (sequence [ char 'a', char 'b', char 'c' ])
                         |> parse "a_c"
                         |> Result.toMaybe
                         |> Expect.equal Nothing

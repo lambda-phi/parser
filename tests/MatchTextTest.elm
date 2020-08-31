@@ -1,7 +1,7 @@
 module MatchTextTest exposing (suite)
 
 import Expect
-import Parser exposing (alphanumeric, anyChar, blank, char, charNoCase, digit, end, letter, lowercase, parse, uppercase)
+import Parser exposing (alphanumeric, anyChar, char, charNoCase, digit, end, letter, lowercase, parse, space, spaces, uppercase)
 import Test exposing (Test, describe, test)
 
 
@@ -164,55 +164,62 @@ suite =
                         |> Result.toMaybe
                         |> Expect.equal Nothing
 
-            -- blank
-            , test "blank match space" <|
+            -- space
+            , test "space match space" <|
                 \_ ->
-                    blank
+                    space
                         |> parse " "
                         |> Expect.equal (Ok ' ')
 
             --
-            , test "blank match tab" <|
+            , test "space match tab" <|
                 \_ ->
-                    blank
+                    space
                         |> parse "\t"
                         |> Expect.equal (Ok '\t')
 
             --
-            , test "blank match newline" <|
+            , test "space match newline" <|
                 \_ ->
-                    blank
+                    space
                         |> parse "\n"
                         |> Expect.equal (Ok '\n')
 
             --
-            , test "blank match return carriage" <|
+            , test "space match return carriage" <|
                 \_ ->
-                    blank
+                    space
                         |> parse "\u{000D}"
                         |> Expect.equal (Ok '\u{000D}')
 
             --
-            , test "blank match form feed" <|
+            , test "space match form feed" <|
                 \_ ->
-                    blank
+                    space
                         |> parse "\u{000C}"
                         |> Expect.equal (Ok '\u{000C}')
 
             --
-            , test "blank match vertical tab" <|
+            , test "space match vertical tab" <|
                 \_ ->
-                    blank
+                    space
                         |> parse "\u{000B}"
                         |> Expect.equal (Ok '\u{000B}')
 
             --
-            , test "blank not match" <|
+            , test "space not match" <|
                 \_ ->
-                    blank
+                    space
                         |> parse "a"
                         |> Result.toMaybe
                         |> Expect.equal Nothing
+
+            -- spaces
+            , test "spaces match" <|
+                \_ ->
+                    spaces
+                        |> parse "  \t\na    "
+                        |> Expect.equal (Ok "  \t\n")
             ]
 
         -- end
