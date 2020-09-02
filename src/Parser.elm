@@ -5,7 +5,7 @@ module Parser exposing
     , sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, repeat, atLeast, atMost, between, until, while
     , succeed, fail, end, andThen, andThen2, orElse, withError
     , map, map2, map3, map4, map5, mapList
-    , Error
+    , Error, errorDump
     )
 
 {-| Intuitive and easy to use parser library.
@@ -43,7 +43,7 @@ module Parser exposing
 
 # Error reporting
 
-@docs Error
+@docs Error, errorDump
 
 -}
 
@@ -1185,3 +1185,35 @@ Note that all parsers must be of the same type, unlike `map2`..`map5`.
 mapList : (List a -> b) -> List (Parser a) -> Parser b
 mapList f parsers =
     map f (sequence parsers)
+
+
+
+---=== ERROR REPORTING ===---
+
+
+{-| Dumps the error into a human-readable format.
+
+    import Parser.Common exposing (number)
+
+    type Point =
+        { x : Float
+        , y : Float
+        }
+
+    point : Parser Point
+    point =
+        into "Point" Point
+            |> drop (char '(')
+            |> take number
+            |> drop (char ',')
+            |> take number
+            |> drop (char ')')
+
+    parse "(12)" point
+        |> Result.mapError errorDump
+    --> Err ""
+
+-}
+errorDump : Error -> String
+errorDump err =
+    Debug.todo "dumpError"
