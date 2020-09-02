@@ -1,21 +1,26 @@
 module Parser.Common exposing
     ( int
     , number
-    , word
     )
 
-import Parser exposing (Parser, andThen, char, concat, digit, fail, letter, oneOf, oneOrMore, succeed, textOf, zeroOrMore, zeroOrOne)
+import Parser exposing (Parser, andThen, char, concat, digit, fail, oneOf, oneOrMore, sequence, succeed, textOf, zeroOrMore, zeroOrOne)
 
 
 
 ---=== Common ===---
 
 
-{-| Gets an integer value.
+{-| Gets an integer value as an `Int`.
 
     import Parser exposing (parse)
 
     parse "123" int --> Ok 123
+
+    parse "-123" int --> Ok -123
+
+    parse "abc" int
+        |> Result.mapError .message
+    --> Err "expected a digit [0-9], but got 'a' instead"
 
 -}
 int : Parser Int
@@ -33,17 +38,49 @@ int =
             )
 
 
+{-| Gets a decimal value as a `Float`.
 
--- number
+    import Parser exposing (parse)
 
+    parse "12" number --> Ok 12.0
 
+    parse "12." number --> Ok 12.0
+
+    parse "12.34" number --> Ok 12.34
+
+    parse "-12.34" number --> Ok -12.34
+
+    parse ".12" number --> Ok 0.12
+
+    parse "-.12" number --> Ok -0.12
+
+    parse "." number
+        |> Result.mapError .message
+    --> Err "expected a digit [0-9], but got '.' instead"
+
+    parse "abc" number
+        |> Result.mapError .message
+    --> Err "expected a digit [0-9], but got 'a' instead"
+
+-}
 number : Parser Float
 number =
     concat
         [ zeroOrOne (oneOf [ char '-', char '+' ])
-        , oneOrMore digit
-        , zeroOrOne (char '.')
-        , zeroOrMore digit
+        , oneOf
+            -- .12
+            [ concat
+                [ sequence [ char '.' ]
+                , oneOrMore digit
+                ]
+
+            -- 12.34
+            , concat
+                [ oneOrMore digit
+                , zeroOrOne (char '.')
+                , zeroOrMore digit
+                ]
+            ]
         ]
         |> textOf
         |> andThen
@@ -55,18 +92,6 @@ number =
                     Nothing ->
                         fail ("failed to parse number from '" ++ str ++ "'")
             )
-
-
-
--- word
-
-
-word : Parser String
-word =
-    concat
-        [ oneOrMore letter
-        ]
-        |> textOf
 
 
 

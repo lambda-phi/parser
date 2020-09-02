@@ -122,7 +122,7 @@ parse input parser =
 You should also specify a name for the context,
 this helps to give better error messages.
 
-    import Parser.Common exposing (number, word)
+    import Parser.Common exposing (number)
 
     type alias NamedValue =
         { name : String
@@ -132,7 +132,7 @@ this helps to give better error messages.
     namedValue : Parser NamedValue
     namedValue =
         into "NamedValue" NamedValue
-            |> take word
+            |> take letters
             |> drop (char '=')
             |> take number
 
