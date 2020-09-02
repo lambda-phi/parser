@@ -1,20 +1,27 @@
 module Parser.Common exposing
     ( int
     , number
+    , word
     )
 
-import Parser exposing (Parser, andThen, digit, fail, map2, mapList, oneOf, oneOrMore, stringOf, succeed, text, zeroOrMore)
+import Parser exposing (Parser, andThen, char, concat, digit, fail, letter, oneOf, oneOrMore, succeed, textOf, zeroOrMore, zeroOrOne)
 
 
 
--- INT
+---=== Common ===---
 
 
+{-| Gets an integer value.
+
+    import Parser exposing (parse)
+
+    parse "123" int --> Ok 123
+
+-}
 int : Parser Int
 int =
-    map2 (++)
-        (oneOf [ text "-", text "" ])
-        (stringOf (oneOrMore digit))
+    concat [ zeroOrOne (char '-'), oneOrMore digit ]
+        |> textOf
         |> andThen
             (\str ->
                 case String.toInt str of
@@ -27,21 +34,18 @@ int =
 
 
 
--- INT BIN
--- INT OCT
--- INT HEX
--- INT EXP
--- NUMBER
+-- number
 
 
 number : Parser Float
 number =
-    mapList (String.join "")
-        [ oneOf [ text "-", text "" ]
-        , stringOf (oneOrMore digit)
-        , oneOf [ text ".", text "" ]
-        , stringOf (zeroOrMore digit)
+    concat
+        [ zeroOrOne (oneOf [ char '-', char '+' ])
+        , oneOrMore digit
+        , zeroOrOne (char '.')
+        , zeroOrMore digit
         ]
+        |> textOf
         |> andThen
             (\str ->
                 case String.toFloat str of
@@ -54,7 +58,27 @@ number =
 
 
 
--- NUMBER EXP
--- DATE
--- TIME
--- DATETIME
+-- word
+
+
+word : Parser String
+word =
+    concat
+        [ oneOrMore letter
+        ]
+        |> textOf
+
+
+
+-- TODO: date
+-- TODO: time
+-- TODO: datetime
+---=== Programming languages ===---
+-- TODO: identifier
+-- TODO: intBin
+-- TODO: intOct
+-- TODO: intHex
+-- TODO: intExp
+-- TODO: numberExp
+-- TODO: quotedText
+-- TODO: collection

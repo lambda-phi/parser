@@ -1,6 +1,8 @@
 {
   "root": "../src",
   "tests": [
+    "Parser",
+    "Parser.Common",
     "README.md"
   ]
 }
