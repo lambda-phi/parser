@@ -39,11 +39,6 @@ module Parser exposing
 
 @docs map, map2, map3, map4, map5, mapList
 
-
-# Error reporting
-
-@docs Error, errorDump, errorDumpSnippet, errorDumpContext
-
 -}
 
 import Result

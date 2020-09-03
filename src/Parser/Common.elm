@@ -1,7 +1,13 @@
-module Parser.Common exposing
-    ( int
-    , number
-    )
+module Parser.Common exposing (int, number)
+
+{-| Common and other useful parsers.
+
+
+# Common
+
+@docs int, number
+
+-}
 
 import Parser exposing (Parser, andThen, char, concat, digit, fail, oneOf, oneOrMore, sequence, succeed, textOf, zeroOrMore, zeroOrOne)
 
