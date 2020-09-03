@@ -3,6 +3,7 @@
   "tests": [
     "Parser",
     "Parser.Common",
+    "Parser.Error",
     "README.md"
   ]
 }

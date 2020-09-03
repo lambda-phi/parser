@@ -17,26 +17,28 @@ Then, it's a good idea to define a function to parse into that data type.
 Here's a simple example to parse an `(x, y)` point, such as `(42, 3.14)`.
 
 ```elm
-import Parser exposing (Parser, char, drop, into, parse, spaces, take)
+import Parser exposing (Parser, char, drop, into, parse, spaces, succeed, take)
 import Parser.Common exposing (number)
 
 type alias Point =
-  { x : Float
-  , y : Float
-  }
+    { x : Float
+    , y : Float
+    }
 
 point : Parser Point
 point =
-  into "Point" Point
-    |> drop (char '(')
-    |> drop spaces
-    |> take number
-    |> drop spaces
-    |> drop (char ',')
-    |> drop spaces
-    |> take number
-    |> drop spaces
-    |> drop (char ')')
+    into "Point"
+        (succeed Point
+            |> drop (char '(')
+            |> drop spaces
+            |> take number
+            |> drop spaces
+            |> drop (char ',')
+            |> drop spaces
+            |> take number
+            |> drop spaces
+            |> drop (char ')')
+        )
 
 parse "(2.71, 3.14)" point --> Ok {x = 2.71, y = 3.14}
 ```

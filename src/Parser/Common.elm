@@ -20,7 +20,7 @@ import Parser exposing (Parser, andThen, char, concat, digit, fail, oneOf, oneOr
 
     parse "abc" int
         |> Result.mapError .message
-    --> Err "Expected a digit [0-9], but got 'a' instead"
+    --> Err "expected a digit [0-9], but got 'a' instead"
 
 -}
 int : Parser Int
@@ -49,19 +49,19 @@ int =
 
     parse "12.34" number --> Ok 12.34
 
-    parse "-12.34" number --> Ok -12.34
-
     parse ".12" number --> Ok 0.12
+
+    parse "-12.34" number --> Ok -12.34
 
     parse "-.12" number --> Ok -0.12
 
     parse "." number
         |> Result.mapError .message
-    --> Err "Expected a digit [0-9], but got '.' instead"
+    --> Err "expected a digit [0-9], but got '.' instead"
 
     parse "abc" number
         |> Result.mapError .message
-    --> Err "Expected a digit [0-9], but got 'a' instead"
+    --> Err "expected a digit [0-9], but got 'a' instead"
 
 -}
 number : Parser Float
@@ -69,13 +69,10 @@ number =
     concat
         [ zeroOrOne (oneOf [ char '-', char '+' ])
         , oneOf
-            -- .12
             [ concat
                 [ sequence [ char '.' ]
                 , oneOrMore digit
                 ]
-
-            -- 12.34
             , concat
                 [ oneOrMore digit
                 , zeroOrOne (char '.')
