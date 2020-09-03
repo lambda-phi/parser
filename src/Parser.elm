@@ -1,11 +1,12 @@
 module Parser exposing
     ( Parser, parse, into, take, drop
     , anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphanumeric, space, spaces
-    , text, textNoCase, textOf
+    , text, textNoCase, textOf, line
     , sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, repeat, atLeast, atMost, between, until, while
     , succeed, fail, end, andThen, andThen2, orElse, withError
     , map, map2, map3, map4, map5, mapList
-    , Error, errorDump
+    , Error, errorDump, errorDumpSnippet
+    , run
     )
 
 {-| Intuitive and easy to use parser library.
@@ -23,7 +24,7 @@ module Parser exposing
 
 # Text operations
 
-@docs text, textNoCase, textOf
+@docs text, textNoCase, textOf, line
 
 
 # List operations
@@ -43,7 +44,7 @@ module Parser exposing
 
 # Error reporting
 
-@docs Error, errorDump
+@docs Error, errorDump, errorDumpSnippet
 
 -}
 
@@ -68,9 +69,12 @@ This includes an error message, the position, and the context stack.
 -}
 type alias Error =
     { message : String
+    , input : String
     , row : Int
     , col : Int
-    , contextStack : List Context
+    , firstRow : Int
+    , firstCol : Int
+    , context : String
     }
 
 
@@ -79,14 +83,9 @@ type alias State =
     , remaining : String
     , row : Int
     , col : Int
-    , contextStack : List Context
-    }
-
-
-type alias Context =
-    { context : String
-    , row : Int
-    , col : Int
+    , firstRow : Int
+    , firstCol : Int
+    , context : String
     }
 
 
@@ -102,7 +101,7 @@ or the parsed value as a result.
     letter
         |> parse "123"
         |> Result.mapError .message
-    --> Err "expected a letter [a-zA-Z], but got '1' instead"
+    --> Err "Expected a letter [a-zA-Z], but got '1' instead"
 
 -}
 parse : String -> Parser a -> Result Error a
@@ -112,7 +111,9 @@ parse input parser =
         , remaining = input
         , row = 1
         , col = 1
-        , contextStack = []
+        , firstRow = 1
+        , firstCol = 1
+        , context = "input text"
         }
         |> Result.map Tuple.first
 
@@ -140,9 +141,13 @@ this helps to give better error messages.
 
 -}
 into : String -> (a -> b) -> Parser (a -> b)
-into context dataType =
-    -- TODO: add context into the stack
+into context dataType state =
     succeed dataType
+        { state
+            | context = context
+            , firstRow = state.row
+            , firstCol = state.col
+        }
 
 
 {-| Takes a parsed value and feeds it to the return value of the parser.
@@ -176,7 +181,7 @@ drop next parser =
     anyChar
         |> parse ""
         |> Result.mapError .message
-    --> Err "expected a character, but reached the end of the input text"
+    --> Err "Expected a character, but reached the end of the input text"
 
 -}
 anyChar : Parser Char
@@ -199,7 +204,7 @@ anyChar state =
                 )
 
         Nothing ->
-            fail "expected a character, but reached the end of the input text" state
+            fail "Expected a character, but reached the end of the input text" state
 
 
 {-| Matches a specific single character.
@@ -210,7 +215,7 @@ This is case sensitive.
     char 'a'
         |> parse "ABC"
         |> Result.mapError .message
-    --> Err "expected the character 'a', but got 'A' instead"
+    --> Err "Expected the character 'a', but got 'A' instead"
 
 -}
 char : Char -> Parser Char
@@ -222,7 +227,7 @@ char ch =
 
             else
                 fail
-                    ("expected the character '"
+                    ("Expected the character '"
                         ++ String.fromChar ch
                         ++ "', but got '"
                         ++ String.fromChar c
@@ -242,7 +247,7 @@ This is case insensitive.
     charNoCase 'a'
         |> parse "123"
         |> Result.mapError .message
-    --> Err "expected the character 'a' or 'A', but got '1' instead"
+    --> Err "Expected the character 'a' or 'A', but got '1' instead"
 
 -}
 charNoCase : Char -> Parser Char
@@ -254,7 +259,7 @@ charNoCase ch =
 
             else
                 fail
-                    ("expected the character '"
+                    ("Expected the character '"
                         ++ String.fromChar (Char.toLower ch)
                         ++ "' or '"
                         ++ String.fromChar (Char.toUpper ch)
@@ -275,7 +280,7 @@ charNoCase ch =
     digit
         |> parse "abc"
         |> Result.mapError .message
-    --> Err "expected a digit [0-9], but got 'a' instead"
+    --> Err "Expected a digit [0-9], but got 'a' instead"
 
 -}
 digit : Parser Char
@@ -287,7 +292,7 @@ digit =
 
             else
                 fail
-                    ("expected a digit [0-9], but got '"
+                    ("Expected a digit [0-9], but got '"
                         ++ String.fromChar c
                         ++ "' instead"
                     )
@@ -304,7 +309,7 @@ digit =
     digits
         |> parse "abc123"
         |> Result.mapError .message
-    --> Err "expected a digit [0-9], but got 'a' instead"
+    --> Err "Expected a digit [0-9], but got 'a' instead"
 
 -}
 digits : Parser String
@@ -324,7 +329,7 @@ This is case insensitive.
     letter
         |> parse "123"
         |> Result.mapError .message
-    --> Err "expected a letter [a-zA-Z], but got '1' instead"
+    --> Err "Expected a letter [a-zA-Z], but got '1' instead"
 
 -}
 letter : Parser Char
@@ -336,7 +341,7 @@ letter =
 
             else
                 fail
-                    ("expected a letter [a-zA-Z], but got '"
+                    ("Expected a letter [a-zA-Z], but got '"
                         ++ String.fromChar c
                         ++ "' instead"
                     )
@@ -356,7 +361,7 @@ This is case insensitive.
     letters
         |> parse "123abc"
         |> Result.mapError .message
-    --> Err "expected a letter [a-zA-Z], but got '1' instead"
+    --> Err "Expected a letter [a-zA-Z], but got '1' instead"
 
 -}
 letters : Parser String
@@ -374,7 +379,7 @@ This is case sensitive.
     lowercase
         |> parse "ABC"
         |> Result.mapError .message
-    --> Err "expected a lowercase letter [a-z], but got 'A' instead"
+    --> Err "Expected a lowercase letter [a-z], but got 'A' instead"
 
 -}
 lowercase : Parser Char
@@ -386,7 +391,7 @@ lowercase =
 
             else
                 fail
-                    ("expected a lowercase letter [a-z], but got '"
+                    ("Expected a lowercase letter [a-z], but got '"
                         ++ String.fromChar c
                         ++ "' instead"
                     )
@@ -404,7 +409,7 @@ This is case sensitive.
     uppercase
         |> parse "abc"
         |> Result.mapError .message
-    --> Err "expected an uppercase letter [A-Z], but got 'a' instead"
+    --> Err "Expected an uppercase letter [A-Z], but got 'a' instead"
 
 -}
 uppercase : Parser Char
@@ -416,7 +421,7 @@ uppercase =
 
             else
                 fail
-                    ("expected an uppercase letter [A-Z], but got '"
+                    ("Expected an uppercase letter [A-Z], but got '"
                         ++ String.fromChar c
                         ++ "' instead"
                     )
@@ -438,7 +443,7 @@ This is case insensitive.
     alphanumeric
         |> parse "_abc"
         |> Result.mapError .message
-    --> Err "expected a letter or digit [a-zA-Z0-9], but got '_' instead"
+    --> Err "Expected a letter or digit [a-zA-Z0-9], but got '_' instead"
 
 -}
 alphanumeric : Parser Char
@@ -450,7 +455,7 @@ alphanumeric =
 
             else
                 fail
-                    ("expected a letter or digit [a-zA-Z0-9], but got '"
+                    ("Expected a letter or digit [a-zA-Z0-9], but got '"
                         ++ String.fromChar c
                         ++ "' instead"
                     )
@@ -476,7 +481,7 @@ or vertical tab `'\v'`.
     space
         |> parse "abc"
         |> Result.mapError .message
-    --> Err "expected a blank space character, but got 'a' instead"
+    --> Err "Expected a blank space character, but got 'a' instead"
 
 -}
 space : Parser Char
@@ -494,7 +499,7 @@ space =
                 |> andThen
                     (\c ->
                         fail
-                            ("expected a blank space character, but got '"
+                            ("Expected a blank space character, but got '"
                                 ++ String.fromChar c
                                 ++ "' instead"
                             )
@@ -530,7 +535,7 @@ This is case sensitive.
     text "abc"
         |> parse "ABCDEF"
         |> Result.mapError .message
-    --> Err "expected the character 'a', but got 'A' instead"
+    --> Err "Expected the character 'a', but got 'A' instead"
 
 -}
 text : String -> Parser String
@@ -548,7 +553,7 @@ This is case insensitive.
     textNoCase "abc"
         |> parse "123"
         |> Result.mapError .message
-    --> Err "expected the character 'a' or 'A', but got '1' instead"
+    --> Err "Expected the character 'a' or 'A', but got '1' instead"
 
 -}
 textNoCase : String -> Parser String
@@ -565,6 +570,16 @@ textNoCase str =
 textOf : Parser (List Char) -> Parser String
 textOf =
     map String.fromList
+
+
+{-| Gets a line from the input text, delimited by '\\n'.
+
+    parse "abc\ndef" line --> Ok "abc"
+
+-}
+line : Parser String
+line =
+    textOf (until (char '\n') anyChar)
 
 
 
@@ -628,7 +643,7 @@ To give a more descriptive error message, you can use [`withError`](#withError).
     oneOf [ char '_', letter ]
         |> parse "123"
         |> Result.mapError .message
-    --> Err "expected a letter [a-zA-Z], but got '1' instead"
+    --> Err "Expected a letter [a-zA-Z], but got '1' instead"
 
 -}
 oneOf : List (Parser a) -> Parser a
@@ -689,7 +704,7 @@ zeroOrMore parser =
     oneOrMore letter
         |> parse "_abc"
         |> Result.mapError .message
-    --> Err "expected a letter [a-zA-Z], but got '_' instead"
+    --> Err "Expected a letter [a-zA-Z], but got '_' instead"
 
 -}
 oneOrMore : Parser a -> Parser (List a)
@@ -706,7 +721,7 @@ oneOrMore parser =
     repeat 3 letter
         |> parse "ab_def"
         |> Result.mapError .message
-    --> Err "expected a letter [a-zA-Z], but got '_' instead"
+    --> Err "Expected a letter [a-zA-Z], but got '_' instead"
 
 -}
 repeat : Int -> Parser a -> Parser (List a)
@@ -723,7 +738,7 @@ repeat n parser =
     atLeast 3 letter
         |> parse "ab_def"
         |> Result.mapError .message
-    --> Err "expected a letter [a-zA-Z], but got '_' instead"
+    --> Err "Expected a letter [a-zA-Z], but got '_' instead"
 
 -}
 atLeast : Int -> Parser a -> Parser (List a)
@@ -760,7 +775,7 @@ atMost max parser =
     between 2 3 letter
         |> parse "a_cdef"
         |> Result.mapError .message
-    --> Err "expected a letter [a-zA-Z], but got '_' instead"
+    --> Err "Expected a letter [a-zA-Z], but got '_' instead"
 
 -}
 between : Int -> Int -> Parser a -> Parser (List a)
@@ -804,10 +819,6 @@ until delimiter parser =
                     )
     in
     until_ []
-
-
-
--- TODO: delimitedBy
 
 
 {-| Parses values while a condition is still `True`.
@@ -871,19 +882,22 @@ succeed value state =
 
 {-| A parser that always fails with the given error message.
 
-    fail "something went wrong :("
+    fail "Something went wrong :("
         |> parse ""
         |> Result.mapError .message
-    --> Err "something went wrong :("
+    --> Err "Something went wrong :("
 
 -}
 fail : String -> Parser a
 fail message state =
     Err
         { message = message
+        , input = state.input
         , row = state.row
-        , col = state.col
-        , contextStack = state.contextStack
+        , col = state.col - 1
+        , firstRow = state.firstRow
+        , firstCol = state.firstCol
+        , context = state.context
         }
 
 
@@ -900,7 +914,7 @@ fail message state =
         |> end
         |> parse "abc123"
         |> Result.mapError .message
-    --> Err "expected the end of the input text, but 3 characters are still remaining"
+    --> Err "Expected the end of the input text, but 3 characters are still remaining"
 
 -}
 end : Parser a -> Parser a
@@ -913,7 +927,7 @@ end parser initialState =
 
                 else
                     fail
-                        ("expected the end of the input text, but "
+                        ("Expected the end of the input text, but "
                             ++ String.fromInt (String.length state.remaining)
                             ++ " characters are still remaining"
                         )
@@ -933,7 +947,7 @@ or to use the last value for the next parser like a backreference.
             (\chars ->
                 case String.toInt chars of
                     Just n -> succeed n
-                    Nothing -> fail "better use Parser.Common.int"
+                    Nothing -> fail "Better use Parser.Common.int"
             )
         |> parse "123"
     --> Ok 123
@@ -943,11 +957,11 @@ or to use the last value for the next parser like a backreference.
             (\chars ->
                 case String.toInt chars of
                     Just n -> succeed n
-                    Nothing -> fail "better use Parser.Common.int"
+                    Nothing -> fail "Better use Parser.Common.int"
             )
         |> parse "abc"
         |> Result.mapError .message
-    --> Err "better use Parser.Common.int"
+    --> Err "Better use Parser.Common.int"
 
 -}
 andThen : (a -> Parser b) -> Parser a -> Parser b
@@ -968,7 +982,7 @@ or to use the last values for the next parser like a backreference.
         (\_ chars ->
             case String.toInt chars of
                 Just n -> succeed n
-                Nothing -> fail "failed to parse a number"
+                Nothing -> fail "Failed to parse a number"
         )
         (char '=')
         digits
@@ -979,13 +993,13 @@ or to use the last values for the next parser like a backreference.
         (\_ chars ->
             case String.toInt chars of
                 Just n -> succeed n
-                Nothing -> fail "failed to parse a number"
+                Nothing -> fail "Failed to parse a number"
         )
         (char '=')
         digits
         |> parse "_123"
         |> Result.mapError .message
-    --> Err "expected the character '=', but got '_' instead"
+    --> Err "Expected the character '=', but got '_' instead"
 
 -}
 andThen2 : (a -> b -> Parser c) -> Parser a -> Parser b -> Parser c
@@ -1014,7 +1028,7 @@ andThen2 f parserA parserB =
         |> orElse digits
         |> parse "_"
         |> Result.mapError .message
-    --> Err "expected a digit [0-9], but got '_' instead"
+    --> Err "Expected a digit [0-9], but got '_' instead"
 
 -}
 orElse : Parser a -> Parser a -> Parser a
@@ -1038,10 +1052,10 @@ It's a little longer, but that way you get access to the potentially invalid
 parsed value.
 
     letters
-        |> withError "a name can only consist of letters"
+        |> withError "A name can only consist of letters"
         |> parse "123"
         |> Result.mapError .message
-    --> Err "a name can only consist of letters"
+    --> Err "A name can only consist of letters"
 
     -- Alternatively, if you want even better error messages.
     textOf (oneOrMore anyChar)
@@ -1051,14 +1065,14 @@ parsed value.
                     succeed txt
                 else
                     fail
-                        ( "a name can only consist of letters, got '"
+                        ( "A name can only consist of letters, got '"
                         ++ txt
                         ++ "'"
                         )
             )
         |> parse "123"
         |> Result.mapError .message
-    --> Err "a name can only consist of letters, got '123'"
+    --> Err "A name can only consist of letters, got '123'"
 
 -}
 withError : String -> Parser a -> Parser a
@@ -1191,11 +1205,23 @@ mapList f parsers =
 ---=== ERROR REPORTING ===---
 
 
+{-| TODO: remove this
+-}
+run input parser =
+    parser
+        { input = input
+        , remaining = input
+        , row = 1
+        , col = 1
+        , contextStack = []
+        }
+
+
 {-| Dumps the error into a human-readable format.
 
     import Parser.Common exposing (number)
 
-    type Point =
+    type alias Point =
         { x : Float
         , y : Float
         }
@@ -1209,11 +1235,134 @@ mapList f parsers =
             |> take number
             |> drop (char ')')
 
-    parse "(12)" point
-        |> Result.mapError errorDump
-    --> Err ""
+    spaces
+        |> andThen (\_ -> point)
+        |> repeat 2
+        |> parse "  (1,2)  (2,)  "
+        |> Result.mapError (errorDump "filename.txt")
+    --> Err
+    -->     (String.join "\n"
+    -->         [ "[ERROR] filename.txt:1:13"
+    -->         , ""
+    -->         , "Expected a digit [0-9], but got ')' instead"
+    -->         , "  while trying to parse a Point"
+    -->         , ""
+    -->         , "1|  (1,2)  (2,)  "
+    -->         , "           ~~~^"
+    -->         ]
+    -->     )
 
 -}
-errorDump : Error -> String
-errorDump err =
-    Debug.todo "dumpError"
+errorDump : String -> Error -> String
+errorDump source err =
+    String.join "\n"
+        [ "[ERROR] "
+            ++ source
+            ++ ":"
+            ++ String.fromInt err.row
+            ++ ":"
+            ++ String.fromInt err.col
+        , ""
+        , err.message
+        , "  while trying to parse a " ++ err.context
+        , ""
+        , errorDumpSnippet err
+        ]
+
+
+{-| Dumps a snippet of the input text that caused the parser to fail.
+
+    import Parser.Common exposing (number)
+
+    type alias Point =
+        { x : Float
+        , y : Float
+        }
+
+    point : Parser Point
+    point =
+        into "Point" Point
+            |> drop (char '(')
+            |> drop spaces
+            |> take number
+            |> drop spaces
+            |> drop (char ',')
+            |> drop spaces
+            |> take number
+            |> drop spaces
+            |> drop (char ')')
+
+    spaces
+        |> andThen (\_ -> point)
+        |> repeat 2
+        |> parse "  (1,2)  (2,)  "
+        |> Result.mapError errorDumpSnippet
+    --> Err
+    -->     (String.join "\n"
+    -->         [ "1|  (1,2)  (2,)  "
+    -->         , "           ~~~^"
+    -->         ]
+    -->     )
+
+    spaces
+        |> andThen (\_ -> point)
+        |> repeat 2
+        |> parse
+            (String.join "\n"
+                [ "  "
+                , "  (1,2)  "
+                , "  "
+                , "  (  "
+                , "  3  "
+                , "  ,  "
+                , "  )  "
+                , "  "
+                ]
+            )
+        |> Result.mapError errorDumpSnippet
+    --> Err
+    -->     (String.join "\n"
+    -->         [ "4|  (  "
+    -->         , "5|  3  "
+    -->         , "6|  ,  "
+    -->         , "7|  )  "
+    -->         , " +~~^"
+    -->         ]
+    -->     )
+
+-}
+errorDumpSnippet : Error -> String
+errorDumpSnippet err =
+    let
+        strRows =
+            { first = String.fromInt err.firstRow
+            , last = String.fromInt err.row
+            }
+
+        lineNoWidth =
+            Basics.max (String.length strRows.first) (String.length strRows.last)
+
+        sourceSnippet =
+            String.lines err.input
+                |> List.drop (err.firstRow - 1)
+                |> List.take (err.row - err.firstRow + 1)
+                |> List.indexedMap
+                    (\i ln ->
+                        String.padLeft lineNoWidth ' ' (String.fromInt (err.firstRow + i))
+                            ++ "|"
+                            ++ ln
+                    )
+
+        underline =
+            if err.firstRow == err.row then
+                String.repeat (lineNoWidth + err.firstCol) " "
+                    ++ String.repeat (err.col - err.firstCol) "~"
+                    ++ "^"
+
+            else
+                String.repeat lineNoWidth " "
+                    ++ "+"
+                    ++ String.repeat (err.col - 1) "~"
+                    ++ "^"
+    in
+    String.join "\n" (sourceSnippet ++ [ underline ])
