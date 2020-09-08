@@ -1,4 +1,4 @@
-# Parser
+# [Parser](https://package.elm-lang.org/packages/davidcavazos/parser/latest/)
 
 An easy to use general-purpose parser for Elm.
 
