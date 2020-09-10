@@ -3,7 +3,7 @@ module Parser exposing
     , anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphanumeric, space, spaces
     , text, textNoCase, textOf, line
     , sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, repeat, atLeast, atMost, between, until, while
-    , succeed, fail, end, andThen, andThen2, orElse, withError
+    , succeed, fail, andThen, andThen2, orElse, withError, end, followedBy, notFollowedBy
     , map, map2, map3, map4, map5, mapList
     )
 
@@ -32,7 +32,7 @@ module Parser exposing
 
 # Chaining
 
-@docs succeed, fail, end, andThen, andThen2, orElse, withError
+@docs succeed, fail, andThen, andThen2, orElse, withError, end, followedBy, notFollowedBy
 
 
 # Mapping
@@ -480,7 +480,7 @@ or vertical tab `'\v'`.
 
     parse "    abc" space --> Ok ' '
 
-    parse "\tabc" space --> Ok '\t'
+    parse "\t abc" space --> Ok '\t'
 
     space
         |> parse "abc"
@@ -517,7 +517,7 @@ space =
 
     parse "    abc" spaces --> Ok "    "
 
-    parse "\tabc" spaces --> Ok "\t"
+    parse "\t abc" spaces --> Ok "\t "
 
     parse "abc" spaces --> Ok ""
 
@@ -797,25 +797,35 @@ or until the end of the input text.
 
 This could be used as a lookahead.
 
-    until (char 'd') letter
+    letter
+        |> until (char 'd')
         |> parse "abcdef"
-    --> Ok [ 'a', 'b', 'c' ]
 
-    until (char 'd') letter
+    --> Ok [ 'a', 'b', 'c' ]
+    letter
+        |> until (char 'd')
         |> parse "abc123"
-    --> Ok [ 'a', 'b', 'c' ]
 
-    until (char 'd') letter
+    --> Ok [ 'a', 'b', 'c' ]
+    letter
+        |> until (char 'd')
         |> parse "abc"
     --> Ok [ 'a', 'b', 'c' ]
+
+    succeed (\str -> str)
+        |> drop (char '<')
+        |> take (textOf (letter |> until (char '>')))
+        |> drop (char '>')
+        |> parse "<abc>"
+    --> Ok "abc"
 
 -}
 until : Parser stop -> Parser a -> Parser (List a)
 until delimiter parser =
     let
         until_ values =
-            andThen (\_ -> succeed values)
-                delimiter
+            succeed values
+                |> followedBy delimiter
                 |> orElse
                     (andThen (\value -> until_ (values ++ [ value ]))
                         parser
@@ -835,19 +845,23 @@ The condition function takes two inputs:
 a list of all the previously matched values,
 and the current value matched.
 
-    while (\_ value -> value /= 'd') letter
+    letter
+        |> while (\_ value -> value /= 'd')
         |> parse "abcdef"
     --> Ok [ 'a', 'b', 'c' ]
 
-    while (\values _ -> List.length values < 3) letter
+    letter
+        |> while (\values _ -> List.length values < 3)
         |> parse "abcdef"
     --> Ok [ 'a', 'b', 'c' ]
 
-    while (\_ value -> value /= 'd') letter
+    letter
+        |> while (\_ value -> value /= 'd')
         |> parse "abc123"
     --> Ok [ 'a', 'b', 'c' ]
 
-    while (\_ value -> value /= 'd') letter
+    letter
+        |> while (\_ value -> value /= 'd')
         |> parse "abc"
     --> Ok [ 'a', 'b', 'c' ]
 
@@ -901,40 +915,6 @@ fail message state =
         , col = state.col - 1
         , context = state.context
         }
-
-
-{-| Succeeds only if there are no more remaining characters in the input text.
-
-> ℹ️ Equivalent regular expression: `$`
-
-    letters
-        |> end
-        |> parse "abc"
-    --> Ok "abc"
-
-    letters
-        |> end
-        |> parse "abc123"
-        |> Result.mapError .message
-    --> Err "expected the end of the input text, but 3 characters are still remaining"
-
--}
-end : Parser a -> Parser a
-end parser initialState =
-    parser initialState
-        |> Result.andThen
-            (\( value, state ) ->
-                if String.isEmpty state.remaining then
-                    succeed value state
-
-                else
-                    fail
-                        ("expected the end of the input text, but "
-                            ++ String.fromInt (String.length state.remaining)
-                            ++ " characters are still remaining"
-                        )
-                        state
-            )
 
 
 {-| Parse one value `andThen` do something with that value,
@@ -1082,6 +1062,99 @@ withError message parser state =
     parser state
         |> Result.mapError
             (\e -> { e | message = message })
+
+
+{-| Succeeds only if there are no more remaining characters in the input text.
+This does not consume any inputs.
+
+> ℹ️ Equivalent regular expression: `$`
+
+    letters
+        |> end
+        |> parse "abc"
+    --> Ok "abc"
+
+    letters
+        |> end
+        |> parse "abc123"
+        |> Result.mapError .message
+    --> Err "expected the end of the input text, but 3 characters are still remaining"
+
+-}
+end : Parser a -> Parser a
+end parser initialState =
+    parser initialState
+        |> Result.andThen
+            (\( value, state ) ->
+                if String.isEmpty state.remaining then
+                    succeed value state
+
+                else
+                    fail
+                        ("expected the end of the input text, but "
+                            ++ String.fromInt (String.length state.remaining)
+                            ++ " characters are still remaining"
+                        )
+                        state
+            )
+
+
+{-| Succeeds only if the input text is followed by a _lookahead_ parser.
+This does not consume any inputs.
+
+> ℹ️ Equivalent regular expression: `(?=...)` _(positive lookahead)_
+
+    letters
+        |> followedBy digit
+        |> parse "abc123"
+    --> Ok "abc"
+
+    letters
+        |> followedBy digit
+        |> parse "abc@def"
+        |> Result.mapError .message
+    --> Err "expected a digit [0-9], but got '@' instead"
+
+-}
+followedBy : Parser lookahead -> Parser a -> Parser a
+followedBy lookahead parser initialState =
+    parser initialState
+        |> Result.andThen
+            (\( value, state ) ->
+                lookahead state
+                    |> Result.map (\_ -> ( value, state ))
+            )
+
+
+{-| Succeeds only if the input text is _not_ followed by a _lookahead_ parser.
+This does not consume any inputs.
+
+> ℹ️ Equivalent regular expression: `(?!...)` _(negative lookahead)_
+
+    letters
+        |> notFollowedBy digit
+        |> parse "abc@def"
+    --> Ok "abc"
+
+    letters
+        |> notFollowedBy digit
+        |> parse "abc123"
+        |> Result.mapError .message
+    --> Err "the input text was followed by an unexpected pattern"
+
+-}
+notFollowedBy : Parser lookahead -> Parser a -> Parser a
+notFollowedBy lookahead parser initialState =
+    parser initialState
+        |> Result.andThen
+            (\( value, state ) ->
+                case lookahead state of
+                    Ok _ ->
+                        fail "the input text was followed by an unexpected pattern" state
+
+                    Err _ ->
+                        Ok ( value, state )
+            )
 
 
 
