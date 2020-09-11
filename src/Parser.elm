@@ -2,8 +2,8 @@ module Parser exposing
     ( Parser, Error, parse, into, take, drop
     , anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphanumeric, space, spaces
     , text, textNoCase, textOf, line
-    , sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, repeat, atLeast, atMost, between, until, while
-    , succeed, fail, andThen, andThen2, andThenIgnore, orElse, withError, end, followedBy, notFollowedBy
+    , sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, repeat, atLeast, atMost, between, until, untilIncluding, while
+    , succeed, fail, andThen, andThen2, andThenIgnore, orElse, orEnd, withError, end, followedBy, notFollowedBy
     , map, map2, map3, map4, map5, mapList
     )
 
@@ -27,12 +27,12 @@ module Parser exposing
 
 # List operations
 
-@docs sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, repeat, atLeast, atMost, between, until, while
+@docs sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, repeat, atLeast, atMost, between, until, untilIncluding, while
 
 
 # Chaining
 
-@docs succeed, fail, andThen, andThen2, andThenIgnore, orElse, withError, end, followedBy, notFollowedBy
+@docs succeed, fail, andThen, andThen2, andThenIgnore, orElse, orEnd, withError, end, followedBy, notFollowedBy
 
 
 # Mapping
@@ -790,30 +790,27 @@ between min max parser =
 
 
 {-| Parses a values repeatedly until a delimiter parser matches.
-The delimiter marks the end of the sequence, but is not consumed.
+The delimiter marks the end of the sequence, and it is consumed.
 
-If the delimiter is not found, it parses until it stops matching
-or until the end of the input text.
-
+    -- Gets all the letters until we find 'd'.
     letter
         |> until (char 'd')
         |> parse "abcdef"
     --> Ok [ 'a', 'b', 'c' ]
 
+    -- If the delimiter is not found, we get an error.
     letter
         |> until (char 'd')
         |> parse "abc123"
-    --> Ok [ 'a', 'b', 'c' ]
+        |> Result.mapError .message
+    --> Err "expected a letter [a-zA-Z], but got '1' instead"
 
-    letter
-        |> until (char 'd')
-        |> parse "abc"
-    --> Ok [ 'a', 'b', 'c' ]
-
+    -- The delimiter is not consumed.
     succeed (\str -> str)
         |> drop (char '<')
         |> take (textOf (letter |> until (char '>')))
         |> drop (char '>')
+        |> end
         |> parse "<abc>"
     --> Ok "abc"
 
@@ -821,13 +818,53 @@ or until the end of the input text.
 until : Parser stop -> Parser a -> Parser (List a)
 until delimiter parser =
     let
+        until_ : List a -> Parser (List a)
         until_ values =
             succeed values
                 |> followedBy delimiter
                 |> orElse
-                    (andThen (\value -> until_ (values ++ [ value ]))
-                        parser
-                        |> orElse (succeed values)
+                    (parser
+                        |> andThen (\value -> until_ (values ++ [ value ]))
+                    )
+    in
+    until_ []
+
+
+{-| Parses a values repeatedly until a delimiter parser matches.
+The delimiter marks the end of the sequence, and it is consumed.
+
+    -- Gets all the letters until we find 'd'.
+    letter
+        |> untilIncluding (char 'd')
+        |> parse "abcdef"
+    --> Ok ([ 'a', 'b', 'c' ], 'd')
+
+    -- If the delimiter is not found, we get an error.
+    letter
+        |> untilIncluding (char 'd')
+        |> parse "abc123"
+        |> Result.mapError .message
+    --> Err "expected a letter [a-zA-Z], but got '1' instead"
+
+    -- The delimiter is consumed.
+    succeed (\str -> str)
+        |> drop (char '<')
+        |> take (textOf (letter |> untilIncluding (char '>') |> map Tuple.first))
+        |> end
+        |> parse "<abc>"
+    --> Ok "abc"
+
+-}
+untilIncluding : Parser stop -> Parser a -> Parser ( List a, stop )
+untilIncluding delimiter parser =
+    let
+        until_ : List a -> Parser ( List a, stop )
+        until_ values =
+            delimiter
+                |> map (\delim -> ( values, delim ))
+                |> orElse
+                    (parser
+                        |> andThen (\value -> until_ (values ++ [ value ]))
                     )
     in
     until_ []
@@ -1052,6 +1089,32 @@ orElse fallback parser state =
 
         Err _ ->
             fallback state
+
+
+{-| Succeeds either if the parser succeeds,
+or if there are no more input characters.
+
+    letters
+        |> orEnd
+        |> parse "abc123"
+    --> Ok (Just "abc")
+
+    letters
+        |> orEnd
+        |> parse ""
+    --> Ok Nothing
+
+    letters
+        |> orEnd
+        |> parse "123abc"
+        |> Result.mapError .message
+    --> Err "expected a letter [a-zA-Z], but got '1' instead"
+
+-}
+orEnd : Parser a -> Parser (Maybe a)
+orEnd parser =
+    end (succeed Nothing)
+        |> orElse (parser |> map Just)
 
 
 {-| If there is an error, this replaces the error message.
