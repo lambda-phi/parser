@@ -13,7 +13,7 @@ import Parser exposing (Parser, andThen, char, concat, digit, fail, oneOf, oneOr
 
 
 
----=== Common ===---
+-- COMMON
 
 
 {-| Gets an integer value as an `Int`.
@@ -103,7 +103,13 @@ number =
 -- TODO: date
 -- TODO: time
 -- TODO: datetime
----=== Programming languages ===---
+-- TODO: email
+-- TODO: unixPath
+-- TODO: windowsPath
+-- TODO: uri
+-- TODO: IPv4
+-- TODO: IPv6
+-- PROGRAMMING LANGUAGES
 -- TODO: identifier
 -- TODO: intBin
 -- TODO: intOct
