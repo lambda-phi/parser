@@ -9,7 +9,7 @@ module Parser.Common exposing (int, number)
 
 -}
 
-import Parser exposing (Parser, andThen, char, concat, digit, fail, oneOf, oneOrMore, sequence, succeed, textOf, zeroOrMore, zeroOrOne)
+import Parser exposing (Parser, andThen, char, concat, digit, expected, oneOf, oneOrMore, sequence, succeed, textOf, zeroOrMore, zeroOrOne)
 
 
 
@@ -19,14 +19,18 @@ import Parser exposing (Parser, andThen, char, concat, digit, fail, oneOf, oneOr
 {-| Gets an integer value as an `Int`.
 
     import Parser exposing (parse)
+    import Parser.Error
 
+    -- You can parse integers as `Int` instead of `String`.
     parse "123" int --> Ok 123
 
+    -- It also works with negative numbers.
     parse "-123" int --> Ok -123
 
+    -- But not with invalid numbers.
     parse "abc" int
-        |> Result.mapError .message
-    --> Err "expected a digit [0-9], but got 'a' instead"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:1: I was expecting a digit [0-9].\nI got stuck when I got the character 'a'."
 
 -}
 int : Parser Int
@@ -41,33 +45,33 @@ int =
 
                     Nothing ->
                         -- Unreachable
-                        fail ("Failed to parse integer from '" ++ str ++ "'")
+                        expected ("an integer from '" ++ str ++ "'")
             )
 
 
 {-| Gets a decimal value as a `Float`.
 
     import Parser exposing (parse)
+    import Parser.Error
 
+    -- You can parse numbers as `Float` instead of `String`.
     parse "12" number --> Ok 12.0
-
     parse "12." number --> Ok 12.0
-
     parse "12.34" number --> Ok 12.34
-
     parse ".12" number --> Ok 0.12
 
+    -- It also works with negative numbers.
     parse "-12.34" number --> Ok -12.34
-
     parse "-.12" number --> Ok -0.12
 
+    -- But not with invalid numbers.
     parse "." number
-        |> Result.mapError .message
-    --> Err "expected a digit [0-9], but got '.' instead"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:1: I was expecting a digit [0-9].\nI got stuck when I got the character '.'."
 
     parse "abc" number
-        |> Result.mapError .message
-    --> Err "expected a digit [0-9], but got 'a' instead"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:1: I was expecting a digit [0-9].\nI got stuck when I got the character 'a'."
 
 -}
 number : Parser Float
@@ -95,7 +99,7 @@ number =
 
                     Nothing ->
                         -- Unreachable
-                        fail ("Failed to parse number from '" ++ str ++ "'")
+                        expected ("Failed to parse number from '" ++ str ++ "'")
             )
 
 

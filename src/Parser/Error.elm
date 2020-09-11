@@ -1,11 +1,11 @@
-module Parser.Error exposing (errorDump, errorDumpSnippet)
+module Parser.Error exposing (message, dump, dumpCodeSnippet)
 
 {-| Error reporting utilities.
 
 
 # Error reporting
 
-@docs errorDump, errorDumpSnippet
+@docs message, dump, dumpCodeSnippet
 
 -}
 
@@ -13,7 +13,36 @@ import Parser exposing (Error)
 
 
 
----=== ERROR REPORTING ===---
+-- ERROR REPORTING
+
+
+{-| Creates an error message from an `Error` data.
+
+    import Parser exposing (letter, parse)
+
+    -- Getting a digit instead of a letter.
+    parse "123" letter
+        |> Result.mapError message
+    --> Err "1:1: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '1'."
+
+    -- Running out of input characters.
+    parse "" letter
+        |> Result.mapError message
+    --> Err "1:0: I was expecting a letter [a-zA-Z].\nI reached the end of the input text."
+
+-}
+message : Error -> String
+message err =
+    String.join "\n"
+        [ (String.fromInt err.row ++ ":" ++ String.fromInt err.col)
+            ++ (": I was expecting " ++ err.expected ++ ".")
+        , case err.lastChar of
+            Just ch ->
+                "I got stuck when I got the character '" ++ String.fromChar ch ++ "'."
+
+            Nothing ->
+                "I reached the end of the input text."
+        ]
 
 
 {-| Dumps the error into a human-readable format.
@@ -24,11 +53,10 @@ import Parser exposing (Error)
     spaces
         |> andThen (\_ -> number)
         |> parse "  abc  "
-        |> Result.mapError (errorDump "filename.txt")
+        |> Result.mapError (dump "filename.txt")
     --> Err
-    -->     [ "[ERROR] filename.txt:1:3: I got stuck while parsing"
-    -->     , ""
-    -->     , "input text: expected a digit [0-9], but got 'a' instead"
+    -->     [ "[ERROR] filename.txt:1:3: I was expecting a digit [0-9].\n"
+    -->         ++ "I got stuck when I got the character 'a'."
     -->     , ""
     -->     , "1|  abc  "
     -->     , "    ^"
@@ -54,12 +82,11 @@ import Parser exposing (Error)
     spaces
         |> andThen (\_ -> point)
         |> parse "  (12,)  "
-        |> Result.mapError (errorDump "filename.txt")
+        |> Result.mapError (dump "filename.txt")
     --> Err
-    -->     [ "[ERROR] filename.txt:1:7: I got stuck while parsing"
-    -->     , "  in Point at line 1"
-    -->     , ""
-    -->     , "Point: expected a digit [0-9], but got ')' instead"
+    -->     [ "[ERROR] filename.txt:1:7: I was expecting a digit [0-9].\n"
+    -->         ++ "I got stuck when I got the character ')'."
+    -->     , "  in Point at line 1:3"
     -->     , ""
     -->     , "1|  (12,)  "
     -->     , "    ~~~~^"
@@ -84,39 +111,28 @@ import Parser exposing (Error)
     spaces
         |> andThen (\_ -> line)
         |> parse "  [(12,34),(56,)]  "
-        |> Result.mapError (errorDump "filename.txt")
+        |> Result.mapError (dump "filename.txt")
     --> Err
-    -->     [ "[ERROR] filename.txt:1:16: I got stuck while parsing"
-    -->     , "  in Point at line 1"
-    -->     , "  in Line at line 1"
-    -->     , ""
-    -->     , "Point: expected a digit [0-9], but got ')' instead"
+    -->     [ "[ERROR] filename.txt:1:16: I was expecting a digit [0-9].\n"
+    -->         ++ "I got stuck when I got the character ')'."
+    -->     , "  in Point at line 1:12"
+    -->     , "  in Line at line 1:3"
     -->     , ""
     -->     , "1|  [(12,34),(56,)]  "
     -->     , "             ~~~~^"
     -->     ]
 
 -}
-errorDump : String -> Error -> List String
-errorDump source err =
-    (("[ERROR] " ++ source ++ ":")
-        ++ (String.fromInt err.row ++ ":" ++ String.fromInt err.col)
-        ++ ": I got stuck while parsing"
-    )
+dump : String -> Error -> List String
+dump source err =
+    ("[ERROR] " ++ source ++ ":" ++ message err)
         :: List.map
             (\ctx ->
-                "  in " ++ ctx.name ++ " at line " ++ String.fromInt ctx.row
+                ("  in " ++ ctx.name ++ " at line " ++ String.fromInt ctx.row)
+                    ++ (":" ++ String.fromInt ctx.col)
             )
             err.context
-        ++ [ ""
-           , (List.head err.context
-                |> Maybe.map (\ctx -> ctx.name)
-                |> Maybe.withDefault "input text"
-             )
-                ++ (": " ++ err.message)
-           , ""
-           ]
-        ++ errorDumpSnippet err
+        ++ ("" :: dumpCodeSnippet err)
 
 
 {-| Dumps a snippet of the input text that caused the parser to fail.
@@ -147,7 +163,7 @@ errorDump source err =
     spaces
         |> andThen (\_ -> point)
         |> parse "  (12,)  "
-        |> Result.mapError errorDumpSnippet
+        |> Result.mapError dumpCodeSnippet
     --> Err
     -->     [ "1|  (12,)  "
     -->     , "    ~~~~^"
@@ -165,7 +181,7 @@ errorDump source err =
                 , "  "
                 ]
             )
-        |> Result.mapError errorDumpSnippet
+        |> Result.mapError dumpCodeSnippet
     --> Err
     -->     [ "2|  (  "
     -->     , "3|  12  "
@@ -175,8 +191,8 @@ errorDump source err =
     -->     ]
 
 -}
-errorDumpSnippet : Error -> List String
-errorDumpSnippet err =
+dumpCodeSnippet : Error -> List String
+dumpCodeSnippet err =
     let
         range =
             case err.context of
