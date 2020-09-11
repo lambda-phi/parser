@@ -3,7 +3,7 @@ module Parser exposing
     , anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphanumeric, space, spaces
     , text, textNoCase, textOf, line
     , sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, repeat, atLeast, atMost, between, until, while
-    , succeed, fail, andThen, andThen2, orElse, withError, end, followedBy, notFollowedBy
+    , succeed, fail, andThen, andThen2, andThenIgnore, orElse, withError, end, followedBy, notFollowedBy
     , map, map2, map3, map4, map5, mapList
     )
 
@@ -32,7 +32,7 @@ module Parser exposing
 
 # Chaining
 
-@docs succeed, fail, andThen, andThen2, orElse, withError, end, followedBy, notFollowedBy
+@docs succeed, fail, andThen, andThen2, andThenIgnore, orElse, withError, end, followedBy, notFollowedBy
 
 
 # Mapping
@@ -795,18 +795,16 @@ The delimiter marks the end of the sequence, but is not consumed.
 If the delimiter is not found, it parses until it stops matching
 or until the end of the input text.
 
-This could be used as a lookahead.
-
     letter
         |> until (char 'd')
         |> parse "abcdef"
-
     --> Ok [ 'a', 'b', 'c' ]
+
     letter
         |> until (char 'd')
         |> parse "abc123"
-
     --> Ok [ 'a', 'b', 'c' ]
+
     letter
         |> until (char 'd')
         |> parse "abc"
@@ -864,6 +862,13 @@ and the current value matched.
         |> while (\_ value -> value /= 'd')
         |> parse "abc"
     --> Ok [ 'a', 'b', 'c' ]
+
+    succeed (\str -> str)
+        |> drop (char '<')
+        |> take (textOf (letter |> while (\_ value -> value /= '>')))
+        |> drop (char '>')
+        |> parse "<abc>"
+    --> Ok "abc"
 
 -}
 while : (List a -> a -> Bool) -> Parser a -> Parser (List a)
@@ -992,6 +997,32 @@ andThen2 f parserA parserB =
                 parserB
         )
         parserA
+
+
+{-| Parse and consume the next parser, but ignore its value.
+
+This is useful when you want to match and advance the parser,
+but keep the previous value.
+
+    letters
+        |> andThenIgnore (char '@')
+        |> andThenIgnore letters
+        |> andThenIgnore (text ".com")
+        |> parse "user@example.com"
+    --> Ok "user"
+
+    -- To ignore the previous value, you can use a regular andThen
+    letters
+        |> andThen (\_ -> char '@')
+        |> andThen (\_ -> letters)
+        |> andThenIgnore (text ".com")
+        |> parse "user@example.com"
+    --> Ok "example"
+
+-}
+andThenIgnore : Parser ignore -> Parser a -> Parser a
+andThenIgnore ignore =
+    andThen (\prev -> ignore |> map (\_ -> prev))
 
 
 {-| If the previous parser failed, try a fallback parser.
