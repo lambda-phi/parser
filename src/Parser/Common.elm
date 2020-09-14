@@ -30,7 +30,7 @@ import Parser exposing (Parser, andThen, char, concat, digit, expected, oneOf, o
     -- But not with invalid numbers.
     parse "abc" int
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a digit [0-9].\nI got stuck when I got the character 'a'."
+    --> Err "1:1: I was expecting a digit [0-9]. I got stuck when I got the character 'a'."
 
 -}
 int : Parser Int
@@ -67,11 +67,11 @@ int =
     -- But not with invalid numbers.
     parse "." number
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a digit [0-9].\nI got stuck when I got the character '.'."
+    --> Err "1:1: I was expecting a digit [0-9]. I got stuck when I got the character '.'."
 
     parse "abc" number
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a digit [0-9].\nI got stuck when I got the character 'a'."
+    --> Err "1:1: I was expecting a digit [0-9]. I got stuck when I got the character 'a'."
 
 -}
 number : Parser Float

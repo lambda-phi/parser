@@ -1,9 +1,9 @@
 module Parser exposing
     ( Parser, Error, parse, into, take, drop
-    , anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphaNum, space, spaces
+    , anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphaNum, space, spaces, endOfLine, endOfFile
     , text, textNoCase, textOf, line
     , sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, exactly, atLeast, atMost, between, until, untilIncluding, while
-    , succeed, expected, andThen, andThen2, andThenIgnore, orElse, orEnd, expecting, end, followedBy, notFollowedBy
+    , succeed, expected, andThen, andThen2, andThenIgnore, orElse, expecting, followedBy, notFollowedBy
     , map, map2, map3, map4, map5, mapList
     )
 
@@ -17,7 +17,7 @@ module Parser exposing
 
 # Matching characters
 
-@docs anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphaNum, space, spaces
+@docs anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphaNum, space, spaces, endOfLine, endOfFile
 
 
 # Text operations
@@ -25,14 +25,14 @@ module Parser exposing
 @docs text, textNoCase, textOf, line
 
 
-# List operations
+# Sequences
 
 @docs sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, exactly, atLeast, atMost, between, until, untilIncluding, while
 
 
 # Chaining
 
-@docs succeed, expected, andThen, andThen2, andThenIgnore, orElse, orEnd, expecting, end, followedBy, notFollowedBy
+@docs succeed, expected, andThen, andThen2, andThenIgnore, orElse, expecting, followedBy, notFollowedBy
 
 
 # Mapping
@@ -46,7 +46,7 @@ import String
 
 
 
----=== TYPE DEFINITIONS ===---
+-- TYPE DEFINITIONS
 
 
 {-| A `Parser` is defined as a function that takes an input state,
@@ -88,7 +88,7 @@ type alias Context =
 
 
 
----=== BASIC USAGE ===---
+-- BASIC USAGE
 
 
 {-| Parse an input text, and get either an [`Error`](#Error)
@@ -103,7 +103,7 @@ or the parsed value as a result.
     letter
         |> parse "123"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '1'."
+    --> Err "1:1: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '1'."
 
 -}
 parse : String -> Parser a -> Result Error a
@@ -186,7 +186,7 @@ drop next parser =
 
 
 
----=== MATCHING TEXT ===---
+-- MATCHING TEXT
 
 
 {-| Matches any single character.
@@ -203,7 +203,7 @@ drop next parser =
     anyChar
         |> parse ""
         |> Result.mapError Parser.Error.message
-    --> Err "1:0: I was expecting a character.\nI reached the end of the input text."
+    --> Err "1:0: I was expecting a character. I reached the end of the input text."
 
 -}
 anyChar : Parser Char
@@ -243,7 +243,7 @@ This is case sensitive.
     char 'a'
         |> parse "ABC"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting the character 'a'.\nI got stuck when I got the character 'A'."
+    --> Err "1:1: I was expecting the character 'a'. I got stuck when I got the character 'A'."
 
 -}
 char : Char -> Parser Char
@@ -273,7 +273,7 @@ This is case insensitive.
     charNoCase 'a'
         |> parse "123"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting the character 'a' (case insensitive).\nI got stuck when I got the character '1'."
+    --> Err "1:1: I was expecting the character 'a' (case insensitive). I got stuck when I got the character '1'."
 
 -}
 charNoCase : Char -> Parser Char
@@ -304,7 +304,7 @@ charNoCase ch =
     digit
         |> parse "abc"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a digit [0-9].\nI got stuck when I got the character 'a'."
+    --> Err "1:1: I was expecting a digit [0-9]. I got stuck when I got the character 'a'."
 
 -}
 digit : Parser Char
@@ -334,7 +334,7 @@ digit =
     digits
         |> parse "abc123"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting one or more digits [0-9]+.\nI got stuck when I got the character 'a'."
+    --> Err "1:1: I was expecting one or more digits [0-9]+. I got stuck when I got the character 'a'."
 
 -}
 digits : Parser String
@@ -358,7 +358,7 @@ This is case insensitive.
     letter
         |> parse "123"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '1'."
+    --> Err "1:1: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '1'."
 
 -}
 letter : Parser Char
@@ -390,7 +390,7 @@ This is case insensitive.
     letters
         |> parse "123abc"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting one or more letters [a-zA-Z]+.\nI got stuck when I got the character '1'."
+    --> Err "1:1: I was expecting one or more letters [a-zA-Z]+. I got stuck when I got the character '1'."
 
 -}
 letters : Parser String
@@ -413,7 +413,7 @@ This is case sensitive.
     lowercase
         |> parse "ABC"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a lowercase letter [a-z].\nI got stuck when I got the character 'A'."
+    --> Err "1:1: I was expecting a lowercase letter [a-z]. I got stuck when I got the character 'A'."
 
 -}
 lowercase : Parser Char
@@ -444,7 +444,7 @@ This is case sensitive.
     uppercase
         |> parse "abc"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting an uppercase letter [A-Z].\nI got stuck when I got the character 'a'."
+    --> Err "1:1: I was expecting an uppercase letter [A-Z]. I got stuck when I got the character 'a'."
 
 -}
 uppercase : Parser Char
@@ -477,7 +477,7 @@ This is case insensitive.
     alphaNum
         |> parse "_abc"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a letter or a digit [a-zA-Z0-9].\nI got stuck when I got the character '_'."
+    --> Err "1:1: I was expecting a letter or a digit [a-zA-Z0-9]. I got stuck when I got the character '_'."
 
 -}
 alphaNum : Parser Char
@@ -515,7 +515,7 @@ or vertical tab `'\v'`.
     space
         |> parse "abc"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a blank space.\nI got stuck when I got the character 'a'."
+    --> Err "1:1: I was expecting a blank space. I got stuck when I got the character 'a'."
 
 -}
 space : Parser Char
@@ -549,8 +549,83 @@ spaces =
     textOf (zeroOrMore space)
 
 
+{-| Succeeds only the parser is at the end of the current line or there are
+no more remaining characters in the input text.
+This does not consume any inputs.
 
----=== TEXT OPERATIONS ===---
+    -- Succeed if we've reached the end of line.
+    letters
+        |> followedBy endOfLine
+        |> parse "abc\n123"
+    --> Ok "abc"
+
+    -- The end of file also counts.
+    letters
+        |> followedBy endOfLine
+        |> parse "abc"
+    --> Ok "abc"
+
+    -- But fail otherwise.
+    import Parser.Error
+
+    letters
+        |> followedBy endOfLine
+        |> parse "abc123"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:4: I was expecting the end of the current line. I got stuck when I got the character '1'."
+
+-}
+endOfLine : Parser ()
+endOfLine state =
+    case anyChar state of
+        Err _ ->
+            succeed () state
+
+        Ok ( '\n', _ ) ->
+            succeed () state
+
+        Ok ( _, newState ) ->
+            expected "the end of the current line" newState
+
+
+{-| Succeeds only if there are no more remaining characters in the input text.
+This does not consume any inputs.
+
+> ℹ️ Equivalent regular expression: `$`
+
+    -- Succeed if we've reached the end of file.
+    letters
+        |> followedBy endOfFile
+        |> parse "abc"
+    --> Ok "abc"
+
+    -- Or fail otherwise.
+    import Parser.Error
+
+    letters
+        |> followedBy endOfFile
+        |> parse "abc123"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:4: I was expecting the end of the input text, but 3 characters are still remaining. I got stuck when I got the character '1'."
+
+-}
+endOfFile : Parser ()
+endOfFile state =
+    case anyChar state of
+        Err _ ->
+            succeed () state
+
+        Ok ( _, nextState ) ->
+            expected
+                ("the end of the input text, but "
+                    ++ String.fromInt (String.length state.remaining)
+                    ++ " characters are still remaining"
+                )
+                nextState
+
+
+
+-- TEXT OPERATIONS
 
 
 {-| Matches a specific text string.
@@ -565,7 +640,7 @@ This is case sensitive.
     text "abc"
         |> parse "abCDEF"
         |> Result.mapError Parser.Error.message
-    --> Err "1:3: I was expecting the text 'abc'.\nI got stuck when I got the character 'C'."
+    --> Err "1:3: I was expecting the text 'abc'. I got stuck when I got the character 'C'."
 
 -}
 text : String -> Parser String
@@ -587,7 +662,7 @@ This is case insensitive.
     textNoCase "abc"
         |> parse "ab@"
         |> Result.mapError Parser.Error.message
-    --> Err "1:3: I was expecting the text 'abc' (case insensitive).\nI got stuck when I got the character '@'."
+    --> Err "1:3: I was expecting the text 'abc' (case insensitive). I got stuck when I got the character '@'."
 
 -}
 textNoCase : String -> Parser String
@@ -622,11 +697,11 @@ textOf =
 -}
 line : Parser String
 line =
-    textOf (until (char '\n' |> orEnd) anyChar)
+    textOf (anyChar |> until endOfLine)
 
 
 
----=== LIST OPERATIONS ===---
+-- SEQUENCES
 
 
 {-| Matches a sequence of parsers in order, and gets the result as a `List`.
@@ -673,7 +748,6 @@ concat parsers =
 It tries to match the parsers in order.
 
 If none of the parsers match, it keeps the error message from the last parser.
-To give a more descriptive error message, you can use [`expecting`](#expecting).
 
 > ℹ️ It's a good idea to use [`expecting`](#expecting) alongside this function
 > to improve the error messages.
@@ -696,7 +770,7 @@ To give a more descriptive error message, you can use [`expecting`](#expecting).
     oneOf [ char '_', letter ]
         |> parse "123"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '1'."
+    --> Err "1:1: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '1'."
 
 -}
 oneOf : List (Parser a) -> Parser a
@@ -767,7 +841,7 @@ zeroOrMore parser =
     oneOrMore letter
         |> parse "_abc"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '_'."
+    --> Err "1:1: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '_'."
 
 -}
 oneOrMore : Parser a -> Parser (List a)
@@ -788,7 +862,7 @@ oneOrMore parser =
     exactly 3 letter
         |> parse "ab_def"
         |> Result.mapError Parser.Error.message
-    --> Err "1:3: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '_'."
+    --> Err "1:3: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '_'."
 
 -}
 exactly : Int -> Parser a -> Parser (List a)
@@ -809,7 +883,7 @@ exactly n parser =
     atLeast 3 letter
         |> parse "ab_def"
         |> Result.mapError Parser.Error.message
-    --> Err "1:3: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '_'."
+    --> Err "1:3: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '_'."
 
 -}
 atLeast : Int -> Parser a -> Parser (List a)
@@ -853,7 +927,7 @@ atMost max parser =
     between 2 3 letter
         |> parse "a_cdef"
         |> Result.mapError Parser.Error.message
-    --> Err "1:2: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '_'."
+    --> Err "1:2: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '_'."
 
 -}
 between : Int -> Int -> Parser a -> Parser (List a)
@@ -877,7 +951,7 @@ The delimiter marks the end of the sequence, and it is _not_ consumed.
         |> drop (char '<')
         |> take (textOf (letter |> until (char '>')))
         |> drop (char '>')
-        |> end
+        |> drop endOfFile
         |> parse "<abc>"
     --> Ok "abc"
 
@@ -888,7 +962,7 @@ The delimiter marks the end of the sequence, and it is _not_ consumed.
         |> until (char 'd')
         |> parse "abc123"
         |> Result.mapError Parser.Error.message
-    --> Err "1:4: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '1'."
+    --> Err "1:4: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '1'."
 
 -}
 until : Parser stop -> Parser a -> Parser (List a)
@@ -926,7 +1000,7 @@ The delimiter marks the end of the sequence, and it is consumed.
     succeed (\str -> str)
         |> drop (char '<')
         |> take (textOf (letter |> untilIncluding (char '>') |> map Tuple.first))
-        |> end
+        |> drop endOfFile
         |> parse "<abc>"
     --> Ok "abc"
 
@@ -937,7 +1011,7 @@ The delimiter marks the end of the sequence, and it is consumed.
         |> untilIncluding (char 'd')
         |> parse "abc123"
         |> Result.mapError Parser.Error.message
-    --> Err "1:4: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '1'."
+    --> Err "1:4: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '1'."
 
 -}
 untilIncluding : Parser stop -> Parser a -> Parser ( List a, stop )
@@ -992,7 +1066,7 @@ and the current value matched.
     -- Once the condition fails, that input is _not_ consumed.
     succeed (\str -> str)
         |> drop (char '<')
-        |> take (textOf (letter |> while (\_ value -> value /= '>')))
+        |> take (textOf (anyChar |> while (\_ value -> value /= '>')))
         |> drop (char '>')
         |> parse "<abc>"
     --> Ok "abc"
@@ -1001,23 +1075,24 @@ and the current value matched.
 while : (List a -> a -> Bool) -> Parser a -> Parser (List a)
 while condition parser =
     let
-        while_ values =
-            andThen
-                (\value ->
+        while_ : List a -> Parser (List a)
+        while_ values state =
+            case parser state of
+                Ok ( value, nextState ) ->
                     if condition values value then
-                        while_ (values ++ [ value ])
+                        while_ (values ++ [ value ]) nextState
 
                     else
-                        succeed values
-                )
-                parser
-                |> orElse (succeed values)
+                        succeed values state
+
+                Err _ ->
+                    succeed values state
     in
     while_ []
 
 
 
----=== CHAINING ===---
+-- CHAINING
 
 
 {-| A parser that always succeeds with the given value.
@@ -1056,7 +1131,7 @@ succeed value state =
     expected "nothing, this always fails"
         |> parse ""
         |> Result.mapError Parser.Error.message
-    --> Err "1:0: I was expecting nothing, this always fails.\nI reached the end of the input text."
+    --> Err "1:0: I was expecting nothing, this always fails. I reached the end of the input text."
 
 -}
 expected : String -> Parser a
@@ -1177,7 +1252,7 @@ andThenIgnore ignore parser =
         |> orElse digits
         |> parse "_"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting one or more digits [0-9]+.\nI got stuck when I got the character '_'."
+    --> Err "1:1: I was expecting one or more digits [0-9]+. I got stuck when I got the character '_'."
 
 -}
 orElse : Parser a -> Parser a -> Parser a
@@ -1188,37 +1263,6 @@ orElse fallback parser state =
 
         Err _ ->
             fallback state
-
-
-{-| Succeeds either if the parser succeeds,
-or if there are no more input characters.
-
-    -- Get some letters.
-    letters
-        |> orEnd
-        |> parse "abc123"
-    --> Ok (Just "abc")
-
-    -- If we get to the end of inputs, that's still okay.
-    letters
-        |> orEnd
-        |> parse ""
-    --> Ok Nothing
-
-    -- But if we match something different, that's _not_ okay.
-    import Parser.Error
-
-    letters
-        |> orEnd
-        |> parse "123abc"
-        |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting one or more letters [a-zA-Z]+.\nI got stuck when I got the character '1'."
-
--}
-orEnd : Parser a -> Parser (Maybe a)
-orEnd parser =
-    end (succeed Nothing)
-        |> orElse (parser |> map Just)
 
 
 {-| If there is an error, this replaces the error message.
@@ -1238,7 +1282,7 @@ parsed value.
         |> expecting "a name consisting of letters"
         |> parse "123"
         |> Result.mapError Parser.Error.message
-    --> Err "1:1: I was expecting a name consisting of letters.\nI got stuck when I got the character '1'."
+    --> Err "1:1: I was expecting a name consisting of letters. I got stuck when I got the character '1'."
 
 -}
 expecting : String -> Parser a -> Parser a
@@ -1246,49 +1290,6 @@ expecting description parser state =
     parser state
         |> Result.mapError
             (\e -> { e | expected = description })
-
-
-{-| Succeeds only if there are no more remaining characters in the input text.
-This does not consume any inputs.
-
-> ℹ️ Equivalent regular expression: `$`
-
-    -- Get some letters, and there are better no input characters left.
-    letters
-        |> end
-        |> parse "abc"
-    --> Ok "abc"
-
-    -- Or fail otherwise.
-    import Parser.Error
-
-    letters
-        |> end
-        |> parse "abc123"
-        |> Result.mapError Parser.Error.message
-    --> Err "1:4: I was expecting the end of the input text, but 3 characters are still remaining.\nI got stuck when I got the character '1'."
-
--}
-end : Parser a -> Parser a
-end parser initialState =
-    parser initialState
-        |> Result.andThen
-            (\( value, state ) ->
-                if String.isEmpty state.remaining then
-                    succeed value state
-
-                else
-                    anyChar state
-                        |> Result.andThen
-                            (\( _, nextState ) ->
-                                expected
-                                    ("the end of the input text, but "
-                                        ++ String.fromInt (String.length state.remaining)
-                                        ++ " characters are still remaining"
-                                    )
-                                    nextState
-                            )
-            )
 
 
 {-| Succeeds only if the input text is followed by a _lookahead_ parser.
@@ -1309,7 +1310,7 @@ This does not consume any inputs.
         |> followedBy digit
         |> parse "abc@def"
         |> Result.mapError Parser.Error.message
-    --> Err "1:4: I was expecting a digit [0-9].\nI got stuck when I got the character '@'."
+    --> Err "1:4: I was expecting a digit [0-9]. I got stuck when I got the character '@'."
 
 -}
 followedBy : Parser lookahead -> Parser a -> Parser a
@@ -1345,7 +1346,7 @@ This does not consume any inputs.
         |> notFollowedBy digit
         |> parse "abc123"
         |> Result.mapError Parser.Error.message
-    --> Err "1:4: I was expecting to not match a pattern, but I did.\nI got stuck when I got the character '1'."
+    --> Err "1:4: I was expecting to not match a pattern, but I did. I got stuck when I got the character '1'."
 
 -}
 notFollowedBy : Parser lookahead -> Parser a -> Parser a
@@ -1363,7 +1364,7 @@ notFollowedBy lookahead parser initialState =
 
 
 
----=== MAPPING ===---
+-- MAPPING
 
 
 {-| Transform the result of a parser.

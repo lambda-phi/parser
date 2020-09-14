@@ -23,26 +23,25 @@ import Parser exposing (Error)
     -- Getting a digit instead of a letter.
     parse "123" letter
         |> Result.mapError message
-    --> Err "1:1: I was expecting a letter [a-zA-Z].\nI got stuck when I got the character '1'."
+    --> Err "1:1: I was expecting a letter [a-zA-Z]. I got stuck when I got the character '1'."
 
     -- Running out of input characters.
     parse "" letter
         |> Result.mapError message
-    --> Err "1:0: I was expecting a letter [a-zA-Z].\nI reached the end of the input text."
+    --> Err "1:0: I was expecting a letter [a-zA-Z]. I reached the end of the input text."
 
 -}
 message : Error -> String
 message err =
-    String.join "\n"
-        [ (String.fromInt err.row ++ ":" ++ String.fromInt err.col)
-            ++ (": I was expecting " ++ err.expected ++ ".")
-        , case err.lastChar of
-            Just ch ->
-                "I got stuck when I got the character '" ++ String.fromChar ch ++ "'."
+    (String.fromInt err.row ++ ":" ++ String.fromInt err.col)
+        ++ (": I was expecting " ++ err.expected ++ ". ")
+        ++ (case err.lastChar of
+                Just ch ->
+                    "I got stuck when I got the character '" ++ String.fromChar ch ++ "'."
 
-            Nothing ->
-                "I reached the end of the input text."
-        ]
+                Nothing ->
+                    "I reached the end of the input text."
+           )
 
 
 {-| Dumps the error into a human-readable format.
@@ -55,8 +54,7 @@ message err =
         |> parse "  abc  "
         |> Result.mapError (dump "filename.txt")
     --> Err
-    -->     [ "[ERROR] filename.txt:1:3: I was expecting a digit [0-9].\n"
-    -->         ++ "I got stuck when I got the character 'a'."
+    -->     [ "[ERROR] filename.txt:1:3: I was expecting a digit [0-9]. I got stuck when I got the character 'a'."
     -->     , ""
     -->     , "1|  abc  "
     -->     , "    ^"
@@ -84,8 +82,7 @@ message err =
         |> parse "  (12,)  "
         |> Result.mapError (dump "filename.txt")
     --> Err
-    -->     [ "[ERROR] filename.txt:1:7: I was expecting a digit [0-9].\n"
-    -->         ++ "I got stuck when I got the character ')'."
+    -->     [ "[ERROR] filename.txt:1:7: I was expecting a digit [0-9]. I got stuck when I got the character ')'."
     -->     , "  in Point at line 1:3"
     -->     , ""
     -->     , "1|  (12,)  "
@@ -113,8 +110,7 @@ message err =
         |> parse "  [(12,34),(56,)]  "
         |> Result.mapError (dump "filename.txt")
     --> Err
-    -->     [ "[ERROR] filename.txt:1:16: I was expecting a digit [0-9].\n"
-    -->         ++ "I got stuck when I got the character ')'."
+    -->     [ "[ERROR] filename.txt:1:16: I was expecting a digit [0-9]. I got stuck when I got the character ')'."
     -->     , "  in Point at line 1:12"
     -->     , "  in Line at line 1:3"
     -->     , ""
