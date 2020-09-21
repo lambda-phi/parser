@@ -1,9 +1,10 @@
 module Parser exposing
     ( Parser, Error, parse, into, take, drop
-    , anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphaNum, space, spaces, endOfLine, endOfFile
-    , text, textNoCase, textOf, line
+    , anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphaNum, space, spaces, punctuation, except
+    , text, textNoCase, textOf, line, split, splitIncluding
     , sequence, concat, oneOf, maybe, zeroOrOne, zeroOrMore, oneOrMore, exactly, atLeast, atMost, between, until, untilIncluding, while
-    , succeed, expected, andThen, andThen2, andThenIgnore, orElse, expecting, followedBy, notFollowedBy
+    , succeed, expected, andThenKeep, andThenIgnore, andThen, andThen2, orElse, expecting, followedBy, notFollowedBy, precededBy, notPrecededBy
+    , wordBoundary, beginningOfLine, endOfLine, beginning, end
     , map, map2, map3, map4, map5, mapList
     )
 
@@ -17,12 +18,12 @@ module Parser exposing
 
 # Matching characters
 
-@docs anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphaNum, space, spaces, endOfLine, endOfFile
+@docs anyChar, char, charNoCase, digit, digits, letter, letters, lowercase, uppercase, alphaNum, space, spaces, punctuation, except
 
 
 # Text operations
 
-@docs text, textNoCase, textOf, line
+@docs text, textNoCase, textOf, line, split, splitIncluding
 
 
 # Sequences
@@ -32,7 +33,12 @@ module Parser exposing
 
 # Chaining
 
-@docs succeed, expected, andThen, andThen2, andThenIgnore, orElse, expecting, followedBy, notFollowedBy
+@docs succeed, expected, andThenKeep, andThenIgnore, andThen, andThen2, orElse, expecting, followedBy, notFollowedBy, precededBy, notPrecededBy
+
+
+# Matching locations
+
+@docs wordBoundary, beginningOfLine, endOfLine, beginning, end
 
 
 # Mapping
@@ -152,19 +158,20 @@ this helps to give better error messages.
 
 -}
 into : String -> Parser a -> Parser a
-into context parser state =
-    let
-        ctx =
-            { name = context
-            , row = state.row
-            , col = state.col
-            }
-    in
-    parser { state | context = ctx :: state.context }
-        |> Result.andThen
-            (\( value, newState ) ->
-                succeed value { newState | context = state.context }
-            )
+into context parser =
+    \state ->
+        let
+            ctx =
+                { name = context
+                , row = state.row
+                , col = state.col
+                }
+        in
+        parser { state | context = ctx :: state.context }
+            |> Result.andThen
+                (\( value, nextState ) ->
+                    succeed value { nextState | context = state.context }
+                )
 
 
 {-| Takes a parsed value and feeds it to the return value of the parser.
@@ -207,28 +214,29 @@ drop next parser =
 
 -}
 anyChar : Parser Char
-anyChar state =
-    case String.uncons state.remaining of
-        Just ( ch, tail ) ->
-            succeed ch
-                (if ch == '\n' then
-                    { state
-                        | remaining = tail
-                        , lastChar = Just ch
-                        , row = state.row + 1
-                        , col = 1
-                    }
+anyChar =
+    \state ->
+        case String.uncons state.remaining of
+            Just ( ch, tail ) ->
+                succeed ch
+                    (if ch == '\n' then
+                        { state
+                            | remaining = tail
+                            , lastChar = Just ch
+                            , row = state.row + 1
+                            , col = 1
+                        }
 
-                 else
-                    { state
-                        | remaining = tail
-                        , lastChar = Just ch
-                        , col = state.col + 1
-                    }
-                )
+                     else
+                        { state
+                            | remaining = tail
+                            , lastChar = Just ch
+                            , col = state.col + 1
+                        }
+                    )
 
-        Nothing ->
-            expected "a character" state
+            Nothing ->
+                expected "a character" state
 
 
 {-| Matches a specific single character.
@@ -494,16 +502,15 @@ alphaNum =
         |> expecting "a letter or a digit [a-zA-Z0-9]"
 
 
-{-| Matches a blank space character.
+{-| Matches a Unicode blank space character.
 A blank space can be a
 regular space `' '`,
 tab `'\t'`,
 new line `'\n'`,
 carriage return `'\r'`,
-form feed `'\f'`,
-or vertical tab `'\v'`.
+or form feed `'\f'`.
 
-> ℹ️ Equivalent regular expression: `[ \t\n\r\f\v]` or `\s`
+> ℹ️ Equivalent regular expression: `[ \t\n\r\f]` or `\s`
 
     -- Match a blank space.
     parse "    abc" space --> Ok ' '
@@ -526,14 +533,13 @@ space =
         , char '\n' -- new line
         , char '\u{000D}' -- \r -- carriage return
         , char '\u{000C}' -- \f -- form feed
-        , char '\u{000B}' -- \v -- vertical tab
         ]
         |> expecting "a blank space"
 
 
-{-| Matches zero or more spaces.
+{-| Matches zero or more Unicode blank spaces.
 
-> ℹ️ Equivalent regular expression: `[ \t\n\r\f\v]*` or `\s*`
+> ℹ️ Equivalent regular expression: `[ \t\n\r\f]*` or `\s*`
 
     -- Match many spaces.
     parse "    abc" spaces --> Ok "    "
@@ -549,79 +555,61 @@ spaces =
     textOf (zeroOrMore space)
 
 
-{-| Succeeds only the parser is at the end of the current line or there are
-no more remaining characters in the input text.
-This does not consume any inputs.
+{-| Matches an ASCII punctuation character.
+A punctuation character can be any of
+`!`, `"`, `#`, `$`, `%`, `&`, `'`, `(`, `)`, `*`, `+`, `,`, `-`, `.`,
+`/`, `:`, `;`, `<`, `=`, `>`, `?`, `@`, `[`, `]`, `^`, `_`, `\``,`{`,`}`, or`~\`.
 
-    -- Succeed if we've reached the end of line.
-    letters
-        |> followedBy endOfLine
-        |> parse "abc\n123"
-    --> Ok "abc"
+> ℹ️ Equivalent regular expression: `[!"#$%&'()*+,-./:;<=>?@[\]^_\\{}~]`
 
-    -- The end of file also counts.
-    letters
-        |> followedBy endOfLine
-        |> parse "abc"
-    --> Ok "abc"
+    -- Match a punctuation character.
+    parse "#hashtag" punctuation --> Ok '#'
+    parse "=123" punctuation --> Ok '='
 
-    -- But fail otherwise.
+    -- But anything else makes it fail.
     import Parser.Error
 
-    letters
-        |> followedBy endOfLine
-        |> parse "abc123"
+    punctuation
+        |> parse "abc"
         |> Result.mapError Parser.Error.message
-    --> Err "1:4: I was expecting the end of the current line. I got stuck when I got the character '1'."
+    --> Err "1:1: I was expecting a punctuation character. I got stuck when I got the character 'a'."
 
 -}
-endOfLine : Parser ()
-endOfLine state =
-    case anyChar state of
-        Err _ ->
-            succeed () state
-
-        Ok ( '\n', _ ) ->
-            succeed () state
-
-        Ok ( _, newState ) ->
-            expected "the end of the current line" newState
+punctuation : Parser Char
+punctuation =
+    List.map char
+        [ '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[', ']', '^', '_', '\\', '{', '}', '~' ]
+        |> oneOf
+        |> expecting "a punctuation character"
 
 
-{-| Succeeds only if there are no more remaining characters in the input text.
-This does not consume any inputs.
+{-| Matches any character `except` the parser provided.
 
-> ℹ️ Equivalent regular expression: `$`
+> ℹ️ It's a good idea to use [`expecting`](#expecting) alongside this function
+> to improve the error messages.
 
-    -- Succeed if we've reached the end of file.
-    letters
-        |> followedBy endOfFile
-        |> parse "abc"
-    --> Ok "abc"
-
-    -- Or fail otherwise.
     import Parser.Error
 
-    letters
-        |> followedBy endOfFile
-        |> parse "abc123"
+    -- Anything except a letter is okay.
+    parse "123" (except letter) --> Ok '1'
+    parse "-123" (except letter) --> Ok '-'
+
+    -- But a letter is not.
+    except letter
+        |> parse "abc"
         |> Result.mapError Parser.Error.message
-    --> Err "1:4: I was expecting the end of the input text, but 3 characters are still remaining. I got stuck when I got the character '1'."
+    --> Err "1:1: I was expecting a different character. I got stuck when I got the character 'a'."
 
 -}
-endOfFile : Parser ()
-endOfFile state =
-    case anyChar state of
-        Err _ ->
-            succeed () state
+except : Parser Char -> Parser Char
+except parser =
+    \state ->
+        case parser state of
+            Ok ( _, nextState ) ->
+                expected "a different character" nextState
 
-        Ok ( _, nextState ) ->
-            expected
-                ("the end of the input text, but "
-                    ++ String.fromInt (String.length state.remaining)
-                    ++ " characters are still remaining"
-                )
-                nextState
+            Err _ ->
+                anyChar state
 
 
 
@@ -685,6 +673,8 @@ textOf =
 
 {-| Gets a line from the input text, delimited by '\\n'.
 
+    import Parser.Error
+
     -- A line could be delimited by the newline character '\n'.
     parse "abc\ndef" line --> Ok "abc"
 
@@ -692,12 +682,107 @@ textOf =
     parse "abc" line --> Ok "abc"
 
     -- An empty line still counts.
-    parse "" line --> Ok ""
+    parse "\n" line --> Ok ""
+
+    -- But not an empty file.
+    line
+        |> parse ""
+        |> Result.mapError Parser.Error.message
+    --> Err "1:0: I was expecting a line. I reached the end of the input text."
+
+    -- So we can parse multiple lines.
+    zeroOrMore line
+        |> parse "abc\ndef\nghi"
+    --> Ok [ "abc", "def", "ghi"]
 
 -}
 line : Parser String
 line =
-    textOf (anyChar |> until endOfLine)
+    \state ->
+        if String.isEmpty state.remaining then
+            expected "a line" state
+
+        else
+            (anyChar
+                |> untilIncluding endOfLine
+                |> map Tuple.first
+                |> textOf
+            )
+                state
+
+
+{-| Splits the input text by a _separator_ parser into a `List` of `String`s.
+The separators cannot overlap, and are discarded after being matched.
+
+    -- Split Comma-Separated-Values (CSV) into a `List` of `String`s.
+    split (char ',')
+        |> parse "a,bc,def"
+    --> Ok [ "a", "bc", "def" ]
+
+    -- Leading/trailing separators are valid and give empty values.
+    split (char ',')
+        |> parse ",a,,"
+    --> Ok [ "", "a", "", "" ]
+
+    -- An empty input text gives a single empty string element.
+    split (char ',')
+        |> parse ""
+    --> Ok [ "" ]
+
+-}
+split : Parser separator -> Parser (List String)
+split separator =
+    map2 (++)
+        -- Zero or more values pairs delimited by the separator.
+        (anyChar
+            |> untilIncluding separator
+            |> map (\( value, _ ) -> String.fromList value)
+            |> zeroOrMore
+        )
+        -- Last value with whatever is left.
+        (textOf (zeroOrMore anyChar)
+            |> map (\x -> [ x ])
+        )
+
+
+{-| Splits the input text by a _separator_ parser into a `List` of `String`s.
+The separators cannot overlap,
+and are interleaved alongside the values in the order found.
+
+    type Token
+        = Separator
+        | Value String
+
+    -- Note that both values and separators must be of the same type.
+    splitIncluding (text "," |> map (\_ -> Separator)) Value
+        |> parse "a,bc,def"
+    --> Ok [ Value "a", Separator, Value "bc", Separator, Value "def" ]
+
+    -- Leading/trailing separators are valid and give empty values.
+    splitIncluding (text "," |> map (\_ -> Separator)) Value
+        |> parse ",a,,"
+    --> Ok [ Value "", Separator, Value "a", Separator, Value "", Separator, Value "" ]
+
+    -- An empty input text gives a single element from an empty string.
+    splitIncluding (text "," |> map (\_ -> Separator)) Value
+        |> parse ""
+    --> Ok [ Value "" ]
+
+-}
+splitIncluding : Parser a -> (String -> a) -> Parser (List a)
+splitIncluding separator f =
+    map2 (++)
+        -- Zero or more value-separator pairs.
+        (anyChar
+            |> untilIncluding separator
+            |> map (\( value, sep ) -> [ f (String.fromList value), sep ])
+            |> zeroOrMore
+            |> map List.concat
+        )
+        -- Last value with whatever is left.
+        (textOf (zeroOrMore anyChar)
+            |> map (\lastValue -> [ f lastValue ])
+        )
 
 
 
@@ -712,18 +797,19 @@ line =
 
 -}
 sequence : List (Parser a) -> Parser (List a)
-sequence parsers initialState =
-    List.foldl
-        (\parser ->
-            Result.andThen
-                (\( results, state ) ->
-                    parser state
-                        |> Result.map
-                            (Tuple.mapFirst (\result -> results ++ [ result ]))
-                )
-        )
-        (Ok ( [], initialState ))
-        parsers
+sequence parsers =
+    \state ->
+        List.foldl
+            (\parser ->
+                Result.andThen
+                    (\( results, nextState ) ->
+                        parser nextState
+                            |> Result.map
+                                (Tuple.mapFirst (\result -> results ++ [ result ]))
+                    )
+            )
+            (Ok ( [], state ))
+            parsers
 
 
 {-| Concatenates the parsed values from all the parsers into a single list with
@@ -775,7 +861,7 @@ If none of the parsers match, it keeps the error message from the last parser.
 -}
 oneOf : List (Parser a) -> Parser a
 oneOf parsers =
-    List.foldl orElse (expected "") parsers
+    List.foldl orElse (expected "a parser to match") parsers
 
 
 {-| Parses an optional value and returns it as a `Maybe`.
@@ -951,7 +1037,7 @@ The delimiter marks the end of the sequence, and it is _not_ consumed.
         |> drop (char '<')
         |> take (textOf (letter |> until (char '>')))
         |> drop (char '>')
-        |> drop endOfFile
+        |> drop end
         |> parse "<abc>"
     --> Ok "abc"
 
@@ -1000,7 +1086,7 @@ The delimiter marks the end of the sequence, and it is consumed.
     succeed (\str -> str)
         |> drop (char '<')
         |> take (textOf (letter |> untilIncluding (char '>') |> map Tuple.first))
-        |> drop endOfFile
+        |> drop end
         |> parse "<abc>"
     --> Ok "abc"
 
@@ -1119,8 +1205,8 @@ while condition parser =
 
 -}
 succeed : a -> Parser a
-succeed value state =
-    Ok ( value, state )
+succeed value =
+    \state -> Ok ( value, state )
 
 
 {-| A parser that always fails with the given error message.
@@ -1135,15 +1221,54 @@ succeed value state =
 
 -}
 expected : String -> Parser a
-expected description state =
-    Err
-        { expected = description
-        , lastChar = state.lastChar
-        , input = state.input
-        , row = state.row
-        , col = state.col - 1
-        , context = state.context
-        }
+expected description =
+    \state ->
+        Err
+            { expected = description
+            , lastChar = state.lastChar
+            , input = state.input
+            , row = state.row
+            , col = state.col - 1
+            , context = state.context
+            }
+
+
+{-| Parse and consume the next parser, and keep _only_ the previous value.
+
+This is useful when you want to match and advance the parser,
+but keep the previous value and ignore the new value.
+
+    -- Let's parse a simple email, but we're only interested in the username.
+    letters
+        |> andThenIgnore (char '@')
+        |> andThenIgnore letters
+        |> andThenIgnore (text ".com")
+        |> parse "user@example.com"
+    --> Ok "user"
+
+-}
+andThenIgnore : Parser ignore -> Parser a -> Parser a
+andThenIgnore ignore parser =
+    andThen2 (\value _ -> succeed value) parser ignore
+
+
+{-| Parse and consume the next parser, and keep _only_ the new value.
+
+This is useful when you want to match and advance the parser,
+but ignore the previous value and keep the new one.
+
+    -- Let's parse a simple email, but we're only interested in the domain.
+    letters
+        |> andThenIgnore (char '@')
+        |> andThenKeep letters
+        |> andThenIgnore (text ".com")
+        |> parse "user@example.com"
+    --> Ok "example"
+
+-}
+andThenKeep : Parser keep -> Parser a -> Parser keep
+andThenKeep keep parser =
+    andThen (\_ -> keep) parser
 
 
 {-| Parse one value `andThen` do something with that value,
@@ -1168,9 +1293,10 @@ or to use the last value for the next parser like a backreference.
 
 -}
 andThen : (a -> Parser b) -> Parser a -> Parser b
-andThen f parser state =
-    parser state
-        |> Result.andThen (\( value, newState ) -> f value newState)
+andThen f parser =
+    \state ->
+        parser state
+            |> Result.andThen (\( value, nextState ) -> f value nextState)
 
 
 {-| Parse two values `andThen2` do something with those values,
@@ -1204,33 +1330,6 @@ andThen2 f parserA parserB =
         parserA
 
 
-{-| Parse and consume the next parser, but ignore its value.
-
-This is useful when you want to match and advance the parser,
-but keep the previous value.
-
-    -- Let's parse a simple email, but we're only interested in the username.
-    letters
-        |> andThenIgnore (char '@')
-        |> andThenIgnore letters
-        |> andThenIgnore (text ".com")
-        |> parse "user@example.com"
-    --> Ok "user"
-
-    -- To ignore previous values, you can use a regular andThen
-    letters
-        |> andThen (\_ -> char '@')
-        |> andThen (\_ -> letters)
-        |> andThenIgnore (text ".com")
-        |> parse "user@example.com"
-    --> Ok "example"
-
--}
-andThenIgnore : Parser ignore -> Parser a -> Parser a
-andThenIgnore ignore parser =
-    andThen2 (\value _ -> succeed value) parser ignore
-
-
 {-| If the previous parser failed, try a fallback parser.
 
     -- Try letters, `orElse` give me some digits.
@@ -1256,13 +1355,14 @@ andThenIgnore ignore parser =
 
 -}
 orElse : Parser a -> Parser a -> Parser a
-orElse fallback parser state =
-    case parser state of
-        Ok result ->
-            Ok result
+orElse fallback parser =
+    \state ->
+        case parser state of
+            Ok result ->
+                Ok result
 
-        Err _ ->
-            fallback state
+            Err _ ->
+                fallback state
 
 
 {-| If there is an error, this replaces the error message.
@@ -1286,16 +1386,26 @@ parsed value.
 
 -}
 expecting : String -> Parser a -> Parser a
-expecting description parser state =
-    parser state
-        |> Result.mapError
-            (\e -> { e | expected = description })
+expecting description parser =
+    \state ->
+        parser state
+            |> Result.mapError
+                (\e -> { e | expected = description })
 
 
 {-| Succeeds only if the input text is followed by a _lookahead_ parser.
 This does not consume any inputs.
 
+If you want to consume the inputs or use the matched value in any way,
+consider using [`andThen`](#andThen).
+
 > ℹ️ Equivalent regular expression: `(?=...)` _(positive lookahead)_
+
+    -- Succeed only if it's `followedBy` a digit.
+    succeed ":)"
+        |> followedBy digit
+        |> parse "123"
+    --> Ok ":)"
 
     -- Match letters only if it's `followedBy` a digit.
     letters
@@ -1314,13 +1424,14 @@ This does not consume any inputs.
 
 -}
 followedBy : Parser lookahead -> Parser a -> Parser a
-followedBy lookahead parser initialState =
-    parser initialState
-        |> Result.andThen
-            (\( value, state ) ->
-                lookahead state
-                    |> Result.map (\_ -> ( value, state ))
-            )
+followedBy lookahead parser =
+    \state ->
+        parser state
+            |> Result.andThen
+                (\( value, nextState ) ->
+                    lookahead nextState
+                        |> Result.map (\_ -> ( value, nextState ))
+                )
 
 
 {-| Succeeds only if the input text is _not_ followed by a _lookahead_ parser.
@@ -1330,6 +1441,12 @@ This does not consume any inputs.
 > to improve the error messages.
 
 > ℹ️ Equivalent regular expression: `(?!...)` _(negative lookahead)_
+
+    -- Succeed only if it's `notFollowedBy` a digit.
+    succeed ":)"
+        |> notFollowedBy digit
+        |> parse "abc"
+    --> Ok ":)"
 
     -- Match letters only if it's `notFollowedBy` a digit.
     letters
@@ -1350,17 +1467,324 @@ This does not consume any inputs.
 
 -}
 notFollowedBy : Parser lookahead -> Parser a -> Parser a
-notFollowedBy lookahead parser initialState =
-    parser initialState
-        |> Result.andThen
-            (\( value, state ) ->
-                case lookahead state of
-                    Ok ( _, lookaheadState ) ->
-                        expected "to not match a pattern, but I did" lookaheadState
+notFollowedBy lookahead parser =
+    \state ->
+        parser state
+            |> Result.andThen
+                (\( value, nextState ) ->
+                    case lookahead nextState of
+                        Ok ( _, lookaheadState ) ->
+                            expected "to not match a pattern, but I did" lookaheadState
 
-                    Err _ ->
-                        Ok ( value, state )
-            )
+                        Err _ ->
+                            Ok ( value, nextState )
+                )
+
+
+{-| Succeeds only if the last character matches the parser provided.
+This does not consume any inputs.
+
+    import Parser.Error
+
+    -- Make sure some letters were preceded by a '_'.
+    anyChar
+        |> andThen (\_ -> letters |> precededBy (char '_'))
+        |> parse "_abc"
+    --> Ok "abc"
+
+    -- If it was something different, it fails.
+    anyChar
+        |> andThen (\_ -> letters |> precededBy (char '_'))
+        |> parse "@abc"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:1: I was expecting the character '_'. I got stuck when I got the character '@'."
+
+-}
+precededBy : Parser Char -> Parser a -> Parser a
+precededBy lastChar parser =
+    \state ->
+        parser state
+            |> Result.andThen
+                (\( value, nextState ) ->
+                    lastChar
+                        { state
+                            | remaining =
+                                state.lastChar
+                                    |> Maybe.map String.fromChar
+                                    |> Maybe.withDefault ""
+                            , col = state.col - 1
+                        }
+                        |> Result.map (\_ -> ( value, nextState ))
+                )
+
+
+{-| Succeeds only if the last character does _not_ match the parser provided.
+This does not consume any inputs.
+
+    import Parser.Error
+
+    -- Make sure some letters were not preceded by a '_'.
+    anyChar
+        |> andThen (\_ -> letters |> notPrecededBy (char '_'))
+        |> parse "@abc"
+    --> Ok "abc"
+
+    -- If it was preceded by '_', it fails.
+    anyChar
+        |> andThen (\_ -> letters |> notPrecededBy (char '_'))
+        |> parse "_abc"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:1: I was expecting a different character. I got stuck when I got the character '_'."
+
+-}
+notPrecededBy : Parser Char -> Parser a -> Parser a
+notPrecededBy lastChar =
+    precededBy (except lastChar)
+
+
+
+-- MATCHING LOCATIONS
+
+
+{-| Succeeds only if the current position is the beginning or end of a word.
+This does not consume any inputs.
+
+    import Parser.Error
+
+    --- Beginning of a word ---
+
+    -- It can start at the beginning of the input text, followed by an alphanumeric.
+    wordBoundary
+        |> andThen (\_ -> textOf (zeroOrMore anyChar))
+        |> parse "abc"
+    --> Ok "abc"
+
+    -- But not followed by anything else.
+    wordBoundary
+        |> andThen (\_ -> textOf (zeroOrMore anyChar))
+        |> parse "@abc"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:1: I was expecting a word boundary. I got stuck when I got the character '@'."
+
+    -- It can also start with an alphanumeric, preceded by a non-alphanumeric.
+    anyChar
+        |> followedBy wordBoundary
+        |> andThen (\_ -> textOf (zeroOrMore anyChar))
+        |> parse "@abc"
+    --> Ok "abc"
+
+    -- But not if preceded by anything else
+    anyChar
+        |> followedBy wordBoundary
+        |> andThen (\_ -> textOf (zeroOrMore anyChar))
+        |> parse "abc"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:2: I was expecting a word boundary. I got stuck when I got the character 'b'."
+
+
+    --- End of a word ---
+
+    -- It can end at the end of the input text, preceded by an alphanumeric.
+    textOf (zeroOrMore anyChar)
+        |> followedBy wordBoundary
+        |> parse "abc"
+    --> Ok "abc"
+
+    -- But not preceded by anything else.
+    textOf (zeroOrMore anyChar)
+        |> followedBy wordBoundary
+        |> parse "abc@"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:4: I was expecting a word boundary. I got stuck when I got the character '@'."
+
+    -- It can also end with a non-alphanumeric, preceded by an alphanumeric.
+    anyChar
+        |> followedBy wordBoundary
+        |> parse "a@"
+    --> Ok 'a'
+
+    -- But not if preceded by anything else
+    anyChar
+        |> followedBy wordBoundary
+        |> parse "ab"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:2: I was expecting a word boundary. I got stuck when I got the character 'b'."
+
+-}
+wordBoundary : Parser ()
+wordBoundary =
+    oneOf
+        [ beginning |> followedBy alphaNum
+        , succeed () |> precededBy (except alphaNum) |> followedBy alphaNum
+        , end |> precededBy alphaNum
+        , succeed () |> precededBy alphaNum |> followedBy (except alphaNum)
+        ]
+        |> orElse (anyChar |> andThen (\_ -> expected ""))
+        |> expecting "a word boundary"
+
+
+{-| Succeeds only the parser is at the beginning of a new line or
+at the beginning of the input text.
+This does not consume any inputs.
+
+> ℹ️ Equivalent regular expression: `^`
+
+    -- Succeed at the beginning of the file.
+    beginningOfLine
+        |> andThen (\_ -> line)
+        |> parse "abc\n123"
+    --> Ok "abc"
+
+    -- The end of file also counts.
+    line
+        |> followedBy beginningOfLine
+        |> andThen (\_ -> line)
+        |> parse "abc\n123"
+    --> Ok "123"
+
+    -- But fail otherwise.
+    import Parser.Error
+
+    anyChar
+        |> followedBy beginningOfLine
+        |> parse "abc"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:2: I was expecting the beginning of a line. I got stuck when I got the character 'b'."
+
+-}
+beginningOfLine : Parser ()
+beginningOfLine =
+    \state ->
+        case state.lastChar of
+            Nothing ->
+                succeed () state
+
+            Just '\n' ->
+                succeed () state
+
+            -- Carriage return '\r'
+            Just '\u{000D}' ->
+                succeed () state
+
+            _ ->
+                (map (\_ -> ()) anyChar |> andThen (\_ -> expected "the beginning of a line")) state
+
+
+{-| Succeeds only the parser is at the end of the current line or there are
+no more remaining characters in the input text.
+This does not consume any inputs.
+
+> ℹ️ Equivalent regular expression: `$`
+
+    -- Succeed if we've reached the end of line.
+    letters
+        |> followedBy endOfLine
+        |> parse "abc\n123"
+    --> Ok "abc"
+
+    -- A carriage return also counts.
+    letters
+        |> followedBy endOfLine
+        |> parse "abc\r123"
+    --> Ok "abc"
+
+    -- The end of file also counts.
+    letters
+        |> followedBy endOfLine
+        |> parse "abc"
+    --> Ok "abc"
+
+    -- But fail otherwise.
+    import Parser.Error
+
+    letters
+        |> followedBy endOfLine
+        |> parse "abc123"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:4: I was expecting the end of the current line. I got stuck when I got the character '1'."
+
+-}
+endOfLine : Parser ()
+endOfLine =
+    \state ->
+        case anyChar state of
+            Err _ ->
+                succeed () state
+
+            Ok ( '\n', nextState ) ->
+                succeed () nextState
+
+            -- Carriage return '\r'
+            Ok ( '\u{000D}', nextState ) ->
+                succeed () nextState
+
+            Ok ( _, nextState ) ->
+                expected "the end of the current line" nextState
+
+
+{-| Succeeds only if it's the beginning of the input text.
+This does not consume any inputs.
+
+    -- Succeed if we are at the beginning of file.
+    beginning
+        |> andThen (\_ -> letters)
+        |> parse "abc"
+    --> Ok "abc"
+
+    -- Or fail otherwise.
+    import Parser.Error
+
+    letters
+        |> followedBy beginning
+        |> parse "abc123"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:3: I was expecting the beginning of the input text. I got stuck when I got the character 'c'."
+
+-}
+beginning : Parser ()
+beginning =
+    \state ->
+        case state.lastChar of
+            Nothing ->
+                succeed () state
+
+            Just _ ->
+                expected "the beginning of the input text" state
+
+
+{-| Succeeds only if there are no more remaining characters in the input text.
+This does not consume any inputs.
+
+    -- Succeed if we've reached the end of file.
+    letters
+        |> followedBy end
+        |> parse "abc"
+    --> Ok "abc"
+
+    -- Or fail otherwise.
+    import Parser.Error
+
+    letters
+        |> followedBy end
+        |> parse "abc123"
+        |> Result.mapError Parser.Error.message
+    --> Err "1:4: I was expecting the end of the input text, but 3 characters are still remaining. I got stuck when I got the character '1'."
+
+-}
+end : Parser ()
+end =
+    \state ->
+        case anyChar state of
+            Err _ ->
+                succeed () state
+
+            Ok ( _, nextState ) ->
+                expected
+                    ("the end of the input text, but "
+                        ++ String.fromInt (String.length state.remaining)
+                        ++ " characters are still remaining"
+                    )
+                    nextState
 
 
 
