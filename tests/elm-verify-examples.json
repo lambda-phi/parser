@@ -2,8 +2,12 @@
   "root": "../src",
   "tests": [
     "Parser",
+    "Parser.Char",
+    "Parser.Check",
     "Parser.Common",
     "Parser.Error",
+    "Parser.Expression",
+    "Parser.Sequence",
     "README.md"
   ]
 }

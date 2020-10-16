@@ -17,8 +17,9 @@ Then, it's a good idea to define a function to parse into that data type.
 Here's a simple example to parse an 2D point, like `(42, 3.14)`.
 
 ```elm
-import Parser exposing (Parser, char, drop, into, parse, spaces, succeed, take)
-import Parser.Common exposing (number)
+import Parser exposing (Parser, drop, into, parse, succeed, take)
+import Parser.Char exposing (char)
+import Parser.Common exposing (number, spaces)
 import Parser.Error
 
 type alias Point =
@@ -61,9 +62,15 @@ point
 
 For more detailed documentation of the functions available an code examples on how to use them, check the modules:
 
-* [__`Parser`__](https://package.elm-lang.org/packages/davidcavazos/parser/latest/Parser)
-    -- Basic functions including how to match characters, text, sequences, and chaining parsing pipelines.
-* [__`Parser.Common`__](https://package.elm-lang.org/packages/davidcavazos/parser/latest/Parser-Common)
+* [**`Parser`**](https://package.elm-lang.org/packages/davidcavazos/parser/latest/Parser)
+    -- Basic functions on creating and chaining parsers.
+* [**`Parser.Common`**](https://package.elm-lang.org/packages/davidcavazos/parser/latest/Parser-Common)
     -- Common parsers like parsing integers and numbers.
-* [__`Parser.Error`__](https://package.elm-lang.org/packages/davidcavazos/parser/latest/Parser-Error)
+* [**`Parser.Sequence`**](https://package.elm-lang.org/packages/davidcavazos/parser/latest/Parser-Sequence)
+    -- Sequences of parsers.
+* [**`Parser.Expression`**](https://package.elm-lang.org/packages/davidcavazos/parser/latest/Parser-Expression)
+    -- Expressions with operator precedence.
+* [**`Parser.Check`**](https://package.elm-lang.org/packages/davidcavazos/parser/latest/Parser-Check)
+    -- Checking and lookaheads without consuming inputs.
+* [**`Parser.Error`**](https://package.elm-lang.org/packages/davidcavazos/parser/latest/Parser-Error)
     -- Functions for error reporting and formatting.

@@ -18,7 +18,8 @@ import Parser exposing (Error)
 
 {-| Creates an error message from an `Error` data.
 
-    import Parser exposing (letter, parse)
+    import Parser exposing (parse)
+    import Parser.Char exposing (letter)
 
     -- Getting a digit instead of a letter.
     parse "123" letter
@@ -46,11 +47,12 @@ message err =
 
 {-| Dumps the error into a human-readable format.
 
-    import Parser exposing (Parser, andThen, char, drop, into, parse, spaces, succeed, take)
-    import Parser.Common exposing (number)
+    import Parser exposing (Parser, andThenKeep, drop, into, parse, succeed, take)
+    import Parser.Char exposing (char)
+    import Parser.Common exposing (number, spaces)
 
     spaces
-        |> andThen (\_ -> number)
+        |> andThenKeep number
         |> parse "  abc  "
         |> Result.mapError (dump "filename.txt")
     --> Err
@@ -78,7 +80,7 @@ message err =
             )
 
     spaces
-        |> andThen (\_ -> point)
+        |> andThenKeep point
         |> parse "  (12,)  "
         |> Result.mapError (dump "filename.txt")
     --> Err
@@ -106,7 +108,7 @@ message err =
             )
 
     spaces
-        |> andThen (\_ -> line)
+        |> andThenKeep line
         |> parse "  [(12,34),(56,)]  "
         |> Result.mapError (dump "filename.txt")
     --> Err
@@ -133,8 +135,9 @@ dump source err =
 
 {-| Dumps a snippet of the input text that caused the parser to fail.
 
-    import Parser exposing (Parser, andThen, char, drop, into, parse, spaces, succeed, take)
-    import Parser.Common exposing (number)
+    import Parser exposing (Parser, andThenKeep, drop, into, parse, succeed, take)
+    import Parser.Char exposing (char)
+    import Parser.Common exposing (number, spaces)
 
     type alias Point =
         { x : Float
@@ -157,7 +160,7 @@ dump source err =
             )
 
     spaces
-        |> andThen (\_ -> point)
+        |> andThenKeep point
         |> parse "  (12,)  "
         |> Result.mapError dumpCodeSnippet
     --> Err
@@ -166,7 +169,7 @@ dump source err =
     -->     ]
 
     spaces
-        |> andThen (\_ -> point)
+        |> andThenKeep point
         |> parse
             (String.join "\n"
                 [ "  "
