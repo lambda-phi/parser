@@ -1,8 +1,7 @@
 module Parser exposing
-    ( Parser, Error, parse, into, take, drop, textOf
+    ( Parser, Error, parse, into, take, drop, textOf, lazy
     , succeed, expected, oneOf, andThenKeep, andThenIgnore, andThen, andThen2, orElse, expecting
     , map, map2, map3, map4, map5
-    , lazy
     )
 
 {-| Intuitive and easy to use parser library.
@@ -10,7 +9,7 @@ module Parser exposing
 
 # Basic usage
 
-@docs Parser, Error, parse, into, take, drop, textOf
+@docs Parser, Error, parse, into, take, drop, textOf, lazy
 
 
 # Chaining
