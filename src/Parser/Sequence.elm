@@ -253,7 +253,7 @@ between min max parser =
 {-| Matches a values repeatedly until a delimiter parser matches.
 The delimiter marks the end of the sequence, and it is _not_ consumed.
 
-    import Parser exposing (drop, parse, succeed, take, textOf)
+    import Parser exposing (drop, map, parse, succeed, take, textOf)
     import Parser.Char exposing (char, letter)
     import Parser.Check exposing (end)
     import Parser.Error
@@ -262,30 +262,31 @@ The delimiter marks the end of the sequence, and it is _not_ consumed.
     letter
         |> until (char 'd')
         |> parse "abcdef"
-    --> Ok [ 'a', 'b', 'c' ]
+    --> Ok ( [ 'a', 'b', 'c' ], 'd' )
 
-    -- Or until the parser stops matching
+    -- But the delimiter _must_ be present.
     letter
         |> until (char 'd')
         |> parse "abc123"
-    --> Ok [ 'a', 'b', 'c' ]
+        |> Result.toMaybe
+    --> Nothing
 
-    -- The delimiter is _not_ consumed.
+    -- The delimiter is consumed.
     succeed identity
         |> drop (char '<')
-        |> take (textOf (letter |> until (char '>')))
-        |> drop (char '>')
+        |> take (textOf (letter |> until (char '>') |> map Tuple.first))
         |> drop end
         |> parse "<abc>"
     --> Ok "abc"
 
 -}
-until : Parser delimiter -> Parser a -> Parser (List a)
+until : Parser delimiter -> Parser a -> Parser ( List a, delimiter )
 until delimiter parser =
     succeed ()
         |> notFollowedBy delimiter
         |> andThenKeep parser
-        |> fold (\xs x -> xs ++ [ x ]) []
+        |> zeroOrMore
+        |> andThen (\xs -> map (\delim -> ( xs, delim )) delimiter)
 
 
 {-| Reduces matches of a parser.
@@ -330,8 +331,7 @@ split : Parser separator -> Parser (List String)
 split separator =
     map2 (++)
         -- Zero or more values pairs delimited by the separator.
-        (textOf (anyChar |> until separator)
-            |> andThenIgnore separator
+        (textOf (anyChar |> until separator |> map Tuple.first)
             |> zeroOrMore
         )
         -- Last value with whatever is left.
@@ -371,8 +371,9 @@ splitIncluding : Parser a -> (String -> a) -> Parser (List a)
 splitIncluding separator f =
     map2 (++)
         -- Zero or more value-separator pairs.
-        (textOf (anyChar |> until separator)
-            |> andThen (\value -> map (\sep -> [ f value, sep ]) separator)
+        (anyChar
+            |> until separator
+            |> map (\( chars, sep ) -> [ f (String.fromList chars), sep ])
             |> zeroOrMore
             |> map List.concat
         )

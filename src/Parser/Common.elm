@@ -257,8 +257,7 @@ line =
             expected "a line" state
 
         else
-            (textOf (anyChar |> until endOfLine) |> andThenIgnore endOfLine)
-                state
+            textOf (anyChar |> until endOfLine |> map Tuple.first) state
 
 
 {-| Matches a parser as a `token` that can be preceded and followed by
