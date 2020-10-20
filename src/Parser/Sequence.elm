@@ -1,15 +1,15 @@
-module Parser.Sequence exposing (sequence, concat, maybe, zeroOrOne, zeroOrMore, oneOrMore, exactly, atLeast, atMost, between, until, fold, split, splitIncluding)
+module Parser.Sequence exposing (sequence, concat, maybe, zeroOrOne, zeroOrMore, oneOrMore, exactly, atLeast, atMost, between, until, fold, foldWhile, split, splitIncluding)
 
 {-| Parsers involving sequences of matches.
 
 
 # Sequences
 
-@docs sequence, concat, maybe, zeroOrOne, zeroOrMore, oneOrMore, exactly, atLeast, atMost, between, until, fold, split, splitIncluding
+@docs sequence, concat, maybe, zeroOrOne, zeroOrMore, oneOrMore, exactly, atLeast, atMost, between, until, fold, foldWhile, split, splitIncluding
 
 -}
 
-import Parser exposing (Parser, andThen, andThen2, andThenIgnore, andThenKeep, map, map2, orElse, succeed, textOf)
+import Parser exposing (Parser, andThen, andThen2, andThenIgnore, andThenKeep, expected, map, map2, orElse, succeed, textOf)
 import Parser.Char exposing (anyChar)
 import Parser.Check exposing (followedBy, notFollowedBy)
 
@@ -197,8 +197,8 @@ atLeast min parser =
 
 > ℹ️ Equivalent regular expression: `{0,max}`
 
-    import Parser exposing (parse)
-    import Parser.Char exposing (letter)
+    import Parser exposing (parse, andThenIgnore)
+    import Parser.Char exposing (char, letter)
 
     -- We want a maximum of three letters.
     parse "abcdef" (atMost 3 letter) --> Ok [ 'a', 'b', 'c' ]
@@ -209,16 +209,22 @@ atLeast min parser =
     -- Even zero letters are fine.
     parse "_bcdef" (atMost 3 letter) --> Ok []
 
+    -- Make sure we don't consume more than three letters.
+    atMost 3 letter
+        |> andThenIgnore (char 'd')
+        |> parse "abcdef"
+    --> Ok [ 'a', 'b', 'c' ]
+
 -}
 atMost : Int -> Parser a -> Parser (List a)
 atMost max =
-    fold
+    foldWhile
         (\xs x ->
             if List.length xs < max then
-                xs ++ [ x ]
+                Just (xs ++ [ x ])
 
             else
-                xs
+                Nothing
         )
         []
 
@@ -299,9 +305,50 @@ until delimiter parser =
 
 -}
 fold : (b -> a -> b) -> b -> Parser a -> Parser b
-fold f first parser =
+fold f =
+    foldWhile (\xs x -> Just (f xs x))
+
+
+{-| Reduces matches of a parser until a condition is met.
+
+    import Parser exposing (Parser, andThenIgnore, parse)
+    import Parser.Char exposing (char)
+    import Parser.Common exposing (number, token)
+
+    sumWhileLessThan : Float -> Parser Float
+    sumWhileLessThan max =
+        foldWhile
+            (\total x ->
+                if total + x <= max then
+                    Just (total + x)
+                else
+                    Nothing
+            )
+            0
+            (token number)
+
+    -- The fold stops before we reach a maximum of 6 in the sum.
+    parse "2 3 4" (sumWhileLessThan 6) --> Ok 5
+
+    -- Make sure we didn't consume too many numbers.
+    sumWhileLessThan 6
+        |> andThenIgnore (char '4')
+        |> parse "2 3 4"
+    --> Ok 5
+
+-}
+foldWhile : (b -> a -> Maybe b) -> b -> Parser a -> Parser b
+foldWhile f first parser =
     parser
-        |> andThen (\x -> fold f (f first x) parser)
+        |> andThen
+            (\x ->
+                case f first x of
+                    Just next ->
+                        foldWhile f next parser
+
+                    Nothing ->
+                        expected ""
+            )
         |> orElse (succeed first)
 
 
