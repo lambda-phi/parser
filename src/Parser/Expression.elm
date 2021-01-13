@@ -27,6 +27,7 @@ module Parser.Expression exposing
 -- https://eli.thegreenplace.net/2010/01/02/top-down-operator-precedence-parsing
 
 import Parser exposing (Parser, andThen, andThenIgnore, andThenKeep, drop, expected, lazy, map, map2, oneOf, succeed, take)
+import Parser.Common exposing (spaces)
 import Parser.Sequence exposing (fold)
 
 
@@ -157,6 +158,9 @@ or anything not containing an operator.
 
     parse "5" expr --> Ok 5
 
+    -- It does not trim spaces beforehand.
+    parse " 5" expr |> Result.toMaybe --> Nothing
+
 -}
 term : Parser a -> Operator a
 term x =
@@ -178,6 +182,12 @@ term x =
 
     parse "-5" expr --> Ok -5
 
+    -- It does not trim spaces beforehand.
+    parse " -5" expr |> Result.toMaybe --> Nothing
+
+    -- But it does afterwards.
+    parse "- 5" expr --> Ok -5
+
 -}
 prefix : Parser op -> (a -> a) -> Operator a
 prefix op eval =
@@ -185,6 +195,7 @@ prefix op eval =
         (\expr ->
             succeed eval
                 |> drop op
+                |> drop spaces
                 |> take expr
         )
 
@@ -208,12 +219,16 @@ prefix op eval =
 
     parse "5!" expr --> Ok 120
 
+    -- It trims spaces beforehand.
+    parse "5 !" expr --> Ok 120
+
 -}
 suffix : Parser op -> (a -> a) -> Operator a
 suffix op eval =
     InfixFromLeft
         (\_ ->
             succeed eval
+                |> drop spaces
                 |> drop op
         )
 
@@ -232,6 +247,14 @@ suffix op eval =
             ]
 
     parse "(5)" expr --> Ok 5
+    parse "(5" expr |> Result.toMaybe --> Nothing
+    parse "()" expr |> Result.toMaybe --> Nothing
+
+    -- It does not trim spaces beforehand.
+    parse " (5)" expr |> Result.toMaybe --> Nothing
+
+    -- But it does inbetween.
+    parse "( 5 )" expr --> Ok 5
 
 -}
 inbetween : Parser open -> Parser close -> (a -> a) -> Operator a
@@ -240,7 +263,9 @@ inbetween open close eval =
         (\expr ->
             succeed eval
                 |> drop open
+                |> drop spaces
                 |> take expr
+                |> drop spaces
                 |> drop close
         )
 
@@ -264,13 +289,21 @@ inbetween open close eval =
     parse "1+2+3" expr --> Ok 6
     parse "1-2-3" expr --> Ok -4
 
+    -- It does not trim spaces beforehand.
+    parse " 1+2" expr |> Result.toMaybe --> Nothing
+
+    -- But it does inbetween.
+    parse "1 + 2" expr --> Ok 3
+
 -}
 fromLeft : Parser op -> (a -> a -> a) -> Operator a
 fromLeft op eval =
     InfixFromLeft
         (\expr ->
             succeed (\right left -> eval left right)
+                |> drop spaces
                 |> drop op
+                |> drop spaces
                 |> take expr
         )
 
@@ -291,13 +324,21 @@ fromLeft op eval =
     parse "2^3" expr   --> Ok 8
     parse "2^3^2" expr --> Ok 512 -- 2 ^ (3 ^ 2)
 
+    -- It does not trim spaces beforehand.
+    parse " 2^3" expr |> Result.toMaybe --> Nothing
+
+    -- But it does inbetween.
+    parse "2 ^ 3" expr --> Ok 8
+
 -}
 fromRight : Parser op -> (a -> a -> a) -> Operator a
 fromRight op eval =
     InfixFromRight
         (\expr ->
             succeed (\right left -> eval left right)
+                |> drop spaces
                 |> drop op
+                |> drop spaces
                 |> take expr
         )
 

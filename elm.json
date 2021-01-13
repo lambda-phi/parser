@@ -3,7 +3,7 @@
     "name": "davidcavazos/parser",
     "summary": "An easy to use general-purpose parser",
     "license": "MIT",
-    "version": "6.1.0",
+    "version": "6.1.1",
     "exposed-modules": [
         "Parser",
         "Parser.Char",
