@@ -1,9 +1,9 @@
 {
     "type": "package",
-    "name": "davidcavazos/parser",
+    "name": "lambda-phi/parser",
     "summary": "An easy to use general-purpose parser",
     "license": "MIT",
-    "version": "7.0.0",
+    "version": "1.0.0",
     "exposed-modules": [
         "Parser",
         "Parser.Char",
