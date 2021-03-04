@@ -26,9 +26,10 @@ module Parser.Expression exposing
 -- Based on Pratt parsers for operator precedence, but adapted on a functional style.
 -- https://eli.thegreenplace.net/2010/01/02/top-down-operator-precedence-parsing
 
-import Parser exposing (Parser, andThen, andThenIgnore, andThenKeep, drop, expected, lazy, map, map2, oneOf, succeed, take)
+import Parser exposing (Parser, andThen, drop, expected, lazy, map, oneOf, succeed, take)
+import Parser.Char exposing (anyChar)
 import Parser.Common exposing (spaces)
-import Parser.Sequence exposing (fold)
+import Parser.Sequence exposing (exactly, fold)
 
 
 
@@ -50,20 +51,20 @@ or `*` and `/`.
     calculate : Parser Float
     calculate =
         expression
-            [ [ prefix (char '+') identity
-              , prefix (char '-') (\x -> -x)
-              , suffix (char '!') factorial
+            [ [ prefix identity (char '+')
+              , prefix (\x -> -x) (char '-')
+              , suffix factorial (char '!')
               ]
-            , [ fromRight (char '^') (^)
+            , [ fromRight (^) (char '^')
               ]
-            , [ fromLeft (char '*') (*)
-              , fromLeft (char '/') (/)
+            , [ fromLeft (*) (char '*')
+              , fromLeft (/) (char '/')
               ]
-            , [ fromLeft (char '+') (+)
-              , fromLeft (char '-') (-)
+            , [ fromLeft (+) (char '+')
+              , fromLeft (-) (char '-')
               ]
-            , [ inbetween (char '(') (char ')') identity
-              , term number
+            , [ inbetween identity (char '(') (char ')')
+              , term identity number
               ]
             ]
 
@@ -154,7 +155,7 @@ or anything not containing an operator.
 
     expr : Parser Float
     expr =
-        expression [ [ term number ] ]
+        expression [ [ term identity number ] ]
 
     parse "5" expr --> Ok 5
 
@@ -162,9 +163,9 @@ or anything not containing an operator.
     parse " 5" expr |> Result.toMaybe --> Nothing
 
 -}
-term : Parser a -> Operator a
-term x =
-    Prefix (\_ -> x)
+term : (a -> b) -> Parser a -> Operator b
+term eval x =
+    Prefix (\_ -> map eval x)
 
 
 {-| Defines a unary prefix operator.
@@ -176,8 +177,8 @@ term x =
     expr : Parser Float
     expr =
         expression
-            [ [ prefix (char '-') (\x -> -x) ]
-            , [ term number ]
+            [ [ prefix (\x -> -x) (char '-') ]
+            , [ term identity number ]
             ]
 
     parse "-5" expr --> Ok -5
@@ -189,8 +190,8 @@ term x =
     parse "- 5" expr --> Ok -5
 
 -}
-prefix : Parser op -> (a -> a) -> Operator a
-prefix op eval =
+prefix : (a -> a) -> Parser op -> Operator a
+prefix eval op =
     Prefix
         (\expr ->
             succeed eval
@@ -213,8 +214,8 @@ prefix op eval =
     expr : Parser Float
     expr =
         expression
-            [ [ suffix (char '!') factorial ]
-            , [ term number ]
+            [ [ suffix factorial (char '!') ]
+            , [ term identity number ]
             ]
 
     parse "5!" expr --> Ok 120
@@ -223,8 +224,8 @@ prefix op eval =
     parse "5 !" expr --> Ok 120
 
 -}
-suffix : Parser op -> (a -> a) -> Operator a
-suffix op eval =
+suffix : (a -> a) -> Parser op -> Operator a
+suffix eval op =
     InfixFromLeft
         (\_ ->
             succeed eval
@@ -242,8 +243,8 @@ suffix op eval =
     expr : Parser Float
     expr =
         expression
-            [ [ inbetween (char '(') (char ')') identity ]
-            , [ term number ]
+            [ [ inbetween identity (char '(') (char ')') ]
+            , [ term identity number ]
             ]
 
     parse "(5)" expr --> Ok 5
@@ -257,8 +258,8 @@ suffix op eval =
     parse "( 5 )" expr --> Ok 5
 
 -}
-inbetween : Parser open -> Parser close -> (a -> a) -> Operator a
-inbetween open close eval =
+inbetween : (a -> a) -> Parser open -> Parser close -> Operator a
+inbetween eval open close =
     Prefix
         (\expr ->
             succeed eval
@@ -279,10 +280,10 @@ inbetween open close eval =
     expr : Parser Float
     expr =
         expression
-            [ [ fromLeft (char '+') (+)
-              , fromLeft (char '-') (-)
+            [ [ fromLeft (+) (char '+')
+              , fromLeft (-) (char '-')
               ]
-            , [ term number ]
+            , [ term identity number ]
             ]
 
     parse "1+2" expr   --> Ok 3
@@ -296,8 +297,8 @@ inbetween open close eval =
     parse "1 + 2" expr --> Ok 3
 
 -}
-fromLeft : Parser op -> (a -> a -> a) -> Operator a
-fromLeft op eval =
+fromLeft : (a -> a -> a) -> Parser op -> Operator a
+fromLeft eval op =
     InfixFromLeft
         (\expr ->
             succeed (\right left -> eval left right)
@@ -317,8 +318,8 @@ fromLeft op eval =
     expr : Parser Float
     expr =
         expression
-            [ [ fromRight (char '^') (^) ]
-            , [ term number ]
+            [ [ fromRight (^) (char '^') ]
+            , [ term identity number ]
             ]
 
     parse "2^3" expr   --> Ok 8
@@ -331,8 +332,8 @@ fromLeft op eval =
     parse "2 ^ 3" expr --> Ok 8
 
 -}
-fromRight : Parser op -> (a -> a -> a) -> Operator a
-fromRight op eval =
+fromRight : (a -> a -> a) -> Parser op -> Operator a
+fromRight eval op =
     InfixFromRight
         (\expr ->
             succeed (\right left -> eval left right)
